@@ -162,6 +162,8 @@ class MarkdownConverter:
         return False
 
     def _convert_with_pandoc(self, input_path: str, output_path: str) -> dict:
+        # 注意：不使用 --toc 参数，因为 zero_format_normalizer 会生成目录
+        # 避免生成双重目录
         cmd = [
             'pandoc',
             input_path,
@@ -170,8 +172,6 @@ class MarkdownConverter:
             '-t', 'docx+native_numbering',
             '--mathml',
             '--standalone',
-            '--toc',
-            '--toc-depth=3',
         ]
 
         try:

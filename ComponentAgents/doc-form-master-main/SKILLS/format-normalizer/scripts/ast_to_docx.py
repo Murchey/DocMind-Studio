@@ -372,7 +372,11 @@ class ASTToDocxConverter:
         line_spacing = para_cfg.get("line_spacing", 1.5)
         para.paragraph_format.line_spacing = line_spacing
 
-        if para_cfg.get("paragraph_spacing", False):
+        # 公式段落使用较小的段后间距，避免空白过大
+        if has_formula:
+            body_size = self._get_body_font_size()
+            para.paragraph_format.space_after = Pt(body_size * 0.5)  # 公式段落使用一半的段后间距
+        elif para_cfg.get("paragraph_spacing", False):
             body_size = self._get_body_font_size()
             para.paragraph_format.space_after = Pt(body_size)
 
@@ -400,6 +404,7 @@ class ASTToDocxConverter:
             font_name = chinese_font if is_chinese else english_font
             self.set_run_font(run, font_name, is_chinese)
             run.font.size = Pt(body_size)
+            run.font.color.rgb = RGBColor(0, 0, 0)  # 统一字体颜色为黑色
 
     def convert_paragraphs(self):
         para_cfg = self.template_config.get("paragraph", {})
@@ -477,6 +482,7 @@ class ASTToDocxConverter:
                     font_name = chinese_font if is_chinese else english_font
                     self.set_run_font(run, font_name, is_chinese)
                     run.font.size = Pt(body_size)
+                    run.font.color.rgb = RGBColor(0, 0, 0)  # 统一字体颜色为黑色
 
     def _create_heading(self, para_data, heading_level):
         heading_config = self.template_config.get("heading", {})

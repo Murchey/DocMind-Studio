@@ -711,7 +711,14 @@ class ZeroFormatNormalizer:
             para.alignment = WD_ALIGN_PARAGRAPH.RIGHT
 
         para.paragraph_format.line_spacing = line_spacing
-        para.paragraph_format.first_line_indent = Pt(int(first_indent * body_size))
+        
+        # 公式段落不添加首行缩进，且使用较小的段后间距
+        has_formula = any(r.get("type") == "formula" for r in para_data.get("runs", []))
+        if not has_formula:
+            para.paragraph_format.first_line_indent = Pt(int(first_indent * body_size))
+        else:
+            # 公式段落使用较小的段后间距，避免空白过大
+            para.paragraph_format.space_after = Pt(body_size * 0.5)
 
     def _add_references_section(self):
         ref_keywords = ["参考文献", "references", "bibliography"]
@@ -802,6 +809,17 @@ class ZeroFormatNormalizer:
     def _add_header_footer(self):
         header_cfg = self.template_config.get("header", {})
         footer_cfg = self.template_config.get("footer", {})
+        
+        # 检查是否有封面和目录
+        has_cover = self._detect_cover_section()
+        has_toc = self.template_config.get("toc", {}).get("enabled", False)
+        
+        # 计算正文开始的 section 索引
+        body_section_start = 0
+        if has_cover:
+            body_section_start += 1
+        if has_toc:
+            body_section_start += 1
 
         sections = self.doc.sections
         if len(sections) < 1:
@@ -811,7 +829,11 @@ class ZeroFormatNormalizer:
             section.header.is_linked_to_previous = False
             section.footer.is_linked_to_previous = False
 
-            if i == 0 or i == 1:
+            # 判断是否是正文 section
+            is_body_section = (i >= body_section_start)
+            
+            if not is_body_section:
+                # 封面和目录 section：设置空的页眉和页脚
                 if header_cfg.get("enabled", False):
                     header = section.header
                     if header.paragraphs:
@@ -830,6 +852,7 @@ class ZeroFormatNormalizer:
                         fp = footer.add_paragraph()
                     fp.alignment = WD_ALIGN_PARAGRAPH.CENTER
             else:
+                # 正文 section：设置有内容的页眉和页脚
                 if header_cfg.get("enabled", False):
                     header = section.header
                     if header.paragraphs:
@@ -907,6 +930,20 @@ class ZeroFormatNormalizer:
                     for r in fp.runs:
                         r.font.size = Pt(footer_size)
                         self._set_run_font(r, footer_font, is_chinese=True)
+
+    def _detect_cover_section(self):
+        """检测是否有封面 section"""
+        # 检查封面配置
+        cover_cfg = self.template_config.get("cover", {})
+        if cover_cfg.get("enabled", False):
+            return True
+        
+        # 检查 AST 中是否有封面区域
+        for p in self.ast.get("paragraphs", []):
+            if p.get("section") == "cover":
+                return True
+        
+        return False
 
     def _enable_auto_update_fields(self):
         settings_part = self.doc.settings.element

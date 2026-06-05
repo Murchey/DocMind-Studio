@@ -312,11 +312,27 @@ class DocxParser:
         H2_PATTERN_KW = re.compile(r'^(引言|摘要|结论|参考文献|致谢|附录|abstract|references|introduction|conclusion|summary)', re.IGNORECASE)
         H3_PATTERN = re.compile(r'^\d+\.\d+[\.\s]')
 
-        def detect_heading_level(p):
+        # 封面页特征关键词
+        COVER_KEYWORDS = [
+            "摘要", "abstract", "关键词", "keywords", "key words",
+            "作者", "author", "单位", "university", "学校", "学院",
+            "指导教师", "supervisor", "论文", "thesis", "学位", "degree"
+        ]
+
+        def detect_heading_level(p, in_cover=False):
+            """检测段落的标题级别
+            
+            严格的标题检测规则：
+            1. 优先使用 Word 样式
+            2. 模式匹配需要满足格式要求
+            3. 避免将普通段落误识别为标题
+            """
             style = (p.get("style") or "").lower()
             text = (p.get("text") or "").strip()
             if not text:
                 return None, None
+            
+            # 优先使用 Word 样式（最可靠）
             if "heading 1" in style:
                 return "Heading 1", text
             if "heading 2" in style:
@@ -324,21 +340,89 @@ class DocxParser:
             if "heading 3" in style:
                 return "Heading 3", text
 
-            if len(text) > 100:
+            # 文本长度限制（标题通常较短）
+            if len(text) > 80:
                 return None, None
 
+            # H1 检测：第X章/节/部分
             if H1_PATTERN.match(text):
                 return "Heading 1", text
+            
+            # H1 检测：数字 + 空格 + 文本（如 "1  需求分析"）
             if H1_PATTERN_NUM.match(text) and len(text) < 50:
                 return "Heading 1", text
+            
+            # H2 检测：中文数字（一、二、三）
             if H2_PATTERN_CN.match(text):
                 return "Heading 2", text
+            
+            # H2 检测：关键词+冒号（引言：、摘要：）
+            # 需要严格匹配：关键词后必须有冒号，且文本较短
             if H2_PATTERN_KW.match(text.lower()):
-                return "Heading 2", text
+                # 检查是否有冒号
+                if "：" in text or ":" in text:
+                    # 如果在封面区域内，摘要/关键词不识别为标题
+                    if in_cover:
+                        return None, text
+                    return "Heading 2", text
+            
+            # H3 检测：数字编号（1. xxx、1.1 xxx）
             if H3_PATTERN.match(text):
-                return "Heading 3", text
+                # 对于 First Paragraph 样式，需要额外检查是否是标题
+                if "first paragraph" in style:
+                    # 检查是否是标题格式（如 "1.1 反应方程式"）
+                    # 如果是数字编号格式，且长度较短，则识别为标题
+                    if len(text) < 50:
+                        return "Heading 3", text
+                else:
+                    return "Heading 3", text
 
             return None, None
+
+        def is_cover_paragraph(p, next_p=None, prev_p=None):
+            """检测段落是否可能是封面内容"""
+            text = (p.get("text") or "").strip()
+            style = (p.get("style") or "").lower()
+            if not text:
+                return True  # 空行视为封面内容
+            
+            # 包含页码标记
+            if re.match(r'^---\s*PAGE\s+\d+\s*---$', text):
+                return True
+            
+            # 包含封面关键词
+            text_lower = text.lower()
+            for kw in COVER_KEYWORDS:
+                if kw in text_lower:
+                    return True
+            
+            # 包含邮箱格式
+            if "@" in text and ("." in text):
+                return True
+            
+            # 论文标题特征：Heading 1 样式且较短，且后续有作者/单位信息
+            if "heading 1" in style and len(text) < 50:
+                # 检查后续段落是否包含作者/单位信息
+                if next_p:
+                    next_text = (next_p.get("text") or "").strip()
+                    next_style = (next_p.get("style") or "").lower()
+                    # 后续段落包含作者信息或单位信息
+                    if any(kw in next_text.lower() for kw in ["作者", "author", "单位", "university", "学校", "学院"]):
+                        return True
+                    # 后续段落包含摘要/关键词
+                    if any(kw in next_text.lower() for kw in ["摘要", "abstract", "关键词", "keywords"]):
+                        return True
+                    # 后续段落是普通段落且较短（可能是作者信息）
+                    if not next_style.startswith("heading") and len(next_text) < 100:
+                        return True
+            
+            # 作者信息特征：包含姓名和单位
+            if re.match(r'^[A-Z][a-z]+\s+[A-Z][a-z]+', text) and "(" in text:
+                return True
+            if re.match(r'^[\u4e00-\u9fa5]+,\s*[\u4e00-\u9fa5]+', text) and "(" in text:
+                return True
+            
+            return False
 
         cover_end = 0
         toc_start = -1
@@ -346,43 +430,121 @@ class DocxParser:
 
         toc_keywords = ["目录", "目 录", "目  录", "table of contents", "contents"]
 
+        # 第一遍扫描：检测目录区域
         for i, p in enumerate(paras):
             text = (p.get("text") or "").strip()
             text_lower = text.lower()
-            level, _ = detect_heading_level(p)
-
-            if level == "Heading 1":
-                if toc_start >= 0 and toc_end < 0:
-                    toc_end = i
-                if cover_end == 0:
-                    cover_end = i
-                break
-
-            if level:
-                if cover_end == 0:
-                    cover_end = i
-                    break
-
             if any(kw in text_lower for kw in toc_keywords):
                 toc_start = i
-
             if "toc" in (p.get("style") or "").lower() or "目录" in (p.get("style") or "").lower():
                 if toc_start < 0:
                     toc_start = i
                 toc_end = i + 1
 
+        # 第二遍扫描：检测封面区域
+        # 策略：封面是第一个标题之前的所有段落，但需要识别包含摘要/关键词的完整封面
+        body_start = -1
+        
+        # 首先找到第一个 Heading 1，作为可能的封面标题
+        first_h1_idx = -1
+        for i, p in enumerate(paras):
+            text = (p.get("text") or "").strip()
+            style = (p.get("style") or "").lower()
+            if "heading 1" in style:
+                first_h1_idx = i
+                break
+        
+        # 如果找到第一个 Heading 1，检查它是否是封面标题
+        if first_h1_idx >= 0:
+            # 检查后续段落，确定封面范围
+            cover_end_candidate = first_h1_idx + 1  # 至少包含标题本身
+            
+            # 向后扫描，检查是否包含作者、摘要、关键词等封面内容
+            for i in range(first_h1_idx + 1, len(paras)):
+                text = (paras[i].get("text") or "").strip()
+                style = (paras[i].get("style") or "").lower()
+                
+                # 遇到目录区域，停止
+                if toc_start >= 0 and toc_start <= i < toc_end:
+                    break
+                
+                # 遇到正文起始关键词，停止
+                text_lower = text.lower()
+                if text_lower in ["引言", "前言", "introduction", "preface"]:
+                    break
+                
+                # 遇到另一个标题，停止
+                level, _ = detect_heading_level(paras[i], in_cover=False)
+                if level and level != "Heading 1":
+                    break
+                if level == "Heading 1" and i > first_h1_idx:
+                    break
+                
+                # 检查是否是封面内容
+                next_p = paras[i + 1] if i + 1 < len(paras) else None
+                prev_p = paras[i - 1] if i > 0 else None
+                if is_cover_paragraph(paras[i], next_p, prev_p):
+                    cover_end_candidate = i + 1
+                else:
+                    # 如果不是封面内容，但可能是作者信息（普通段落）
+                    if not style.startswith("heading") and len(text) < 100:
+                        cover_end_candidate = i + 1
+                    else:
+                        break
+            
+            body_start = cover_end_candidate
+        else:
+            # 没有找到 Heading 1，使用原始逻辑
+            for i, p in enumerate(paras):
+                text = (p.get("text") or "").strip()
+                level, _ = detect_heading_level(p, in_cover=False)
+                
+                # 遇到目录区域，跳过
+                if toc_start >= 0 and toc_start <= i < toc_end:
+                    continue
+                
+                # 检测正文开始的标志
+                if level in ("Heading 1", "Heading 2", "Heading 3"):
+                    body_start = i
+                    break
+                
+                # 检查是否是正文起始关键词
+                text_lower = text.lower()
+                if text_lower in ["引言", "前言", "introduction", "preface"]:
+                    body_start = i
+                    break
+
+        # 如果没有找到正文开始，则查找第一个明显不是封面的段落
+        if body_start == -1:
+            for i, p in enumerate(paras):
+                text = (p.get("text") or "").strip()
+                if not text:
+                    continue
+                level, _ = detect_heading_level(p, in_cover=False)
+                if level:
+                    body_start = i
+                    break
+                # 如果段落较长且不含封面关键词，可能是正文
+                if len(text) > 100 and not any(is_cover_paragraph(paras[j]) for j in range(max(0, i-2), i+1)):
+                    body_start = i
+                    break
+
+        cover_end = body_start if body_start > 0 else 0
+
+        # 如果仍未找到封面，使用原始逻辑
         if cover_end == 0:
             for i, p in enumerate(paras):
                 text = (p.get("text") or "").strip()
                 if text and len(text) > 5:
-                    level, _ = detect_heading_level(p)
+                    level, _ = detect_heading_level(p, in_cover=False)
                     if level:
                         cover_end = i
                         break
 
+        # 完善目录区域检测
         if toc_start >= 0 and toc_end < 0:
             for i in range(toc_start + 1, len(paras)):
-                level, _ = detect_heading_level(paras[i])
+                level, _ = detect_heading_level(paras[i], in_cover=False)
                 text = (paras[i].get("text") or "").strip()
                 if level == "Heading 1" or (text and not level and len(text) > 20):
                     toc_end = i
@@ -390,6 +552,7 @@ class DocxParser:
             if toc_end < 0:
                 toc_end = min(toc_start + 20, len(paras))
 
+        # 标记段落区域，并根据标题检测结果更新样式
         for i, p in enumerate(paras):
             if toc_start >= 0 and toc_start <= i < toc_end:
                 p["section"] = "toc"
@@ -397,6 +560,10 @@ class DocxParser:
                 p["section"] = "cover"
             else:
                 p["section"] = "body"
+                # 对于正文区域，根据标题检测结果更新样式
+                level, _ = detect_heading_level(p, in_cover=False)
+                if level:
+                    p["style"] = level
 
         self.ast["section_regions"] = {
             "cover_end": cover_end,
