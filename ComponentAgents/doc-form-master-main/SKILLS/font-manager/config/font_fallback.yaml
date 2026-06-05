@@ -1,0 +1,18 @@
+宋体:
+  - SimSun
+  - Noto Serif CJK SC
+  - Source Han Serif SC
+
+黑体:
+  - SimHei
+  - Noto Sans CJK SC
+  - Source Han Sans SC
+
+Times New Roman:
+  - Liberation Serif
+  - DejaVu Serif
+
+Consolas:
+  - Courier New
+  - JetBrains Mono
+  - Fira Code

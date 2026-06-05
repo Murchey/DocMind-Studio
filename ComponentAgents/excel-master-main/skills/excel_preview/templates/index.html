@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Excel 数据对比</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Microsoft YaHei', sans-serif; background: #f0f2f5; height: 100vh; display: flex; flex-direction: column; }
+        
+        .header { 
+            background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%); 
+            color: white; 
+            padding: 12px 24px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center;
+        }
+        .header h1 { font-size: 18px; font-weight: 500; }
+        .header .info { font-size: 13px; opacity: 0.9; }
+        .header-right { display: flex; align-items: center; gap: 16px; }
+        
+        .lang-switcher {
+            position: relative;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 8px;
+            border-radius: 4px;
+            transition: background 0.15s;
+        }
+        .lang-switcher:hover { background: rgba(255,255,255,0.2); }
+        .lang-switcher svg { width: 20px; height: 20px; fill: white; }
+        .lang-dropdown {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            background: white;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 1000;
+            min-width: 120px;
+            display: none;
+        }
+        .lang-dropdown.show { display: block; }
+        .lang-option {
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #202124;
+            transition: background 0.15s;
+        }
+        .lang-option:hover { background: #e8f0fe; }
+        .lang-option.active { background: #1a73e8; color: white; }
+        
+        .main-container { flex: 1; display: flex; overflow: hidden; }
+        
+        .sidebar {
+            width: 280px;
+            background: white;
+            border-right: 1px solid #e0e0e0;
+            display: flex;
+            flex-direction: column;
+        }
+        .sidebar-header {
+            padding: 16px;
+            border-bottom: 1px solid #e0e0e0;
+            font-weight: 500;
+            color: #202124;
+        }
+        .file-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+        .file-item {
+            padding: 10px 12px;
+            margin-bottom: 4px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.15s;
+            font-size: 14px;
+        }
+        .file-item:hover { background: #e8f0fe; }
+        .file-item.active { background: #1a73e8; color: white; }
+        .file-item .name { font-weight: 500; }
+        
+        .content-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .legend {
+            padding: 8px 16px;
+            background: white;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            font-size: 13px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .legend-color {
+            width: 16px;
+            height: 16px;
+            border-radius: 3px;
+        }
+        .legend-color.primary { background: #34a853; }
+        .legend-color.secondary { background: #1a73e8; }
+        .legend-color.value { background: #f9ab00; }
+        
+        .tables-container {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+        
+        .table-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid #e0e0e0;
+            overflow: hidden;
+        }
+        .table-panel:last-child { border-right: none; }
+        
+        .table-header {
+            padding: 10px 16px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .table-header .title { font-weight: 500; color: #202124; font-size: 14px; }
+        .table-header .info { font-size: 12px; color: #80868b; }
+        
+        .table-wrapper { flex: 1; overflow: auto; }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        th, td {
+            padding: 8px 12px;
+            text-align: left;
+            border: 1px solid #e0e0e0;
+            white-space: nowrap;
+        }
+        th {
+            background: #f8f9fa;
+            font-weight: 500;
+            color: #5f6368;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.15s;
+        }
+        th:hover { background: #e8eaed; }
+        th.primary-key { background: #34a853 !important; color: white !important; }
+        th.primary-key::after { content: ' [主键]'; font-size: 11px; opacity: 0.8; }
+        th.secondary-key { background: #1a73e8 !important; color: white !important; }
+        th.secondary-key::after { content: ' [副键]'; font-size: 11px; opacity: 0.8; }
+        th.value-col { background: #f9ab00 !important; color: white !important; }
+        th.value-col::after { content: ' [值]'; font-size: 11px; opacity: 0.8; }
+        td { color: #202124; }
+        tr:nth-child(even) { background: #f8f9fa; }
+        tr:hover { background: #e8f0fe; }
+        
+        .context-menu {
+            position: fixed;
+            background: white;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            z-index: 1000;
+            min-width: 160px;
+            display: none;
+        }
+        .context-menu.show { display: block; }
+        .context-menu-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .context-menu-item:hover { background: #e8f0fe; }
+        .context-menu-item .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        .context-menu-item .dot.primary { background: #34a853; }
+        .context-menu-item .dot.secondary { background: #1a73e8; }
+        .context-menu-item .dot.value { background: #f9ab00; }
+        .context-menu-item .dot.clear { background: #dadce0; }
+        .context-menu-separator {
+            height: 1px;
+            background: #e0e0e0;
+            margin: 4px 0;
+        }
+        
+        .action-bar {
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-top: 1px solid #e0e0e0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .notes-area {
+            padding: 12px 16px;
+            background: #fff8e1;
+            border-top: 1px solid #ffecb3;
+        }
+        .notes-area h4 {
+            font-size: 14px;
+            color: #5f6368;
+            margin-bottom: 8px;
+        }
+        .notes-area textarea {
+            width: 100%;
+            min-height: 60px;
+            padding: 8px;
+            border: 1px solid #dadce0;
+            border-radius: 4px;
+            font-size: 14px;
+            resize: vertical;
+        }
+        
+        .toolbar {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .toolbar button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .btn-primary { background: #1a73e8; color: white; }
+        .btn-primary:hover { background: #1557b0; }
+        .btn-success { background: #34a853; color: white; }
+        .btn-success:hover { background: #2d8e47; }
+        
+        .status-info {
+            font-size: 13px;
+            color: #5f6368;
+        }
+        
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            border-radius: 4px;
+            color: white;
+            font-weight: 500;
+            z-index: 1000;
+            animation: slideIn 0.3s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        }
+        .toast.success { background: #34a853; }
+        .toast.error { background: #d93025; }
+        .toast.info { background: #1a73e8; }
+        
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: #80868b;
+        }
+
+        /* English styles */
+        [lang="en"] .header h1 { font-size: 16px; }
+        [lang="en"] .sidebar-header { font-size: 13px; }
+        [lang="en"] .legend { font-size: 12px; }
+        [lang="en"] .context-menu-item { font-size: 13px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 id="appTitle">Excel 数据对比工具</h1>
+        <div class="header-right">
+            <div class="info" id="headerInfo">加载中...</div>
+            <div class="lang-switcher" onclick="toggleLangDropdown(event)">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/>
+                </svg>
+                <div class="lang-dropdown" id="langDropdown">
+                    <div class="lang-option active" onclick="switchLang('zh')">中文</div>
+                    <div class="lang-option" onclick="switchLang('en')">English</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="main-container">
+        <div class="sidebar">
+            <div class="sidebar-header" id="sidebarTitle">同名文件列表 (<span id="pairCount">0</span> 对)</div>
+            <div class="file-list" id="fileList"></div>
+        </div>
+        
+        <div class="content-area">
+            <div class="legend">
+                <span style="font-weight:500;" id="legendTitle">列类型：</span>
+                <div class="legend-item">
+                    <div class="legend-color primary"></div>
+                    <span id="legendPrimary">主键（点击列头选择）</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color secondary"></div>
+                    <span id="legendSecondary">副键</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color value"></div>
+                    <span id="legendValue">值列</span>
+                </div>
+                <span style="color:#80868b; margin-left:auto;" id="legendHint">右键点击列头可选择列类型</span>
+            </div>
+            
+            <div class="tables-container">
+                <div class="table-panel">
+                    <div class="table-header">
+                        <span class="title" id="leftTitle">左侧文件</span>
+                        <span class="info" id="leftInfo"></span>
+                    </div>
+                    <div class="table-wrapper" id="leftTable">
+                        <div class="loading" id="leftPlaceholder">请选择文件</div>
+                    </div>
+                </div>
+                <div class="table-panel">
+                    <div class="table-header">
+                        <span class="title" id="rightTitle">右侧文件</span>
+                        <span class="info" id="rightInfo"></span>
+                    </div>
+                    <div class="table-wrapper" id="rightTable">
+                        <div class="loading" id="rightPlaceholder">请选择文件</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="notes-area">
+                <h4 id="notesTitle">备注（比对注意事项）</h4>
+                <textarea id="compareNotes" placeholder="请填写比对备注（将应用于所有文件对）..."></textarea>
+            </div>
+            
+            <div class="action-bar">
+                <div class="status-info" id="statusInfo">请选择文件，然后右键点击列头设置列类型</div>
+                <div class="toolbar">
+                    <button class="btn-primary" onclick="confirmAndSave()" id="confirmBtn">确认并保存规则</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="context-menu" id="contextMenu">
+        <div class="context-menu-item" onclick="setColumnType('primary')">
+            <div class="dot primary"></div>
+            <span id="menuPrimary">设为主键列</span>
+        </div>
+        <div class="context-menu-item" onclick="setColumnType('secondary')">
+            <div class="dot secondary"></div>
+            <span id="menuSecondary">设为副键列</span>
+        </div>
+        <div class="context-menu-item" onclick="setColumnType('value')">
+            <div class="dot value"></div>
+            <span id="menuValue">设为值列</span>
+        </div>
+        <div class="context-menu-separator"></div>
+        <div class="context-menu-item" onclick="setColumnType('clear')">
+            <div class="dot clear"></div>
+            <span id="menuClear">清除选择</span>
+        </div>
+    </div>
+
+    <script>
+        // Language translations
+        const translations = {
+            zh: {
+                title: 'Excel 数据对比工具',
+                loading: '加载中...',
+                sidebarTitle: '同名文件列表',
+                pairs: '对',
+                legendTitle: '列类型：',
+                legendPrimary: '主键（点击列头选择）',
+                legendSecondary: '副键',
+                legendValue: '值列',
+                legendHint: '右键点击列头可选择列类型',
+                leftFile: '左侧文件',
+                rightFile: '右侧文件',
+                selectFile: '请选择文件',
+                notesTitle: '备注（比对注意事项）',
+                notesPlaceholder: '请填写比对备注（将应用于所有文件对）...',
+                statusHint: '请选择文件，然后右键点击列头设置列类型',
+                confirmBtn: '确认并保存规则',
+                menuPrimary: '设为主键列',
+                menuSecondary: '设为副键列',
+                menuValue: '设为值列',
+                menuClear: '清除选择',
+                primaryKeyTag: ' [主键]',
+                secondaryKeyTag: ' [副键]',
+                valueTag: ' [值]',
+                rows: '行',
+                cols: '列',
+                primaryKeyLabel: '主键',
+                secondaryKeyLabel: '副键',
+                leftValueLabel: '左侧值列',
+                rightValueLabel: '右侧值列',
+                noSelection: '请右键点击列头设置列类型',
+                errorPrimaryKey: '请先设置主键列（右键点击列头）',
+                errorValueColumn: '请至少设置一个值列（右键点击列头）',
+                successMessage: '规则已保存',
+                closeConfirm: '规则已保存，是否关闭预览服务？',
+                ruleSaved: '规则已保存：{count} 对文件将使用配置进行比对'
+            },
+            en: {
+                title: 'Excel Data Comparison Tool',
+                loading: 'Loading...',
+                sidebarTitle: 'Same-name File List',
+                pairs: 'pairs',
+                legendTitle: 'Column Type:',
+                legendPrimary: 'Primary Key (Click header to select)',
+                legendSecondary: 'Secondary Key',
+                legendValue: 'Value Column',
+                legendHint: 'Right-click column header to select type',
+                leftFile: 'Left File',
+                rightFile: 'Right File',
+                selectFile: 'Please select a file',
+                notesTitle: 'Notes (Comparison Notes)',
+                notesPlaceholder: 'Please enter comparison notes (applied to all file pairs)...',
+                statusHint: 'Please select a file, then right-click column header to set type',
+                confirmBtn: 'Confirm and Save Rules',
+                menuPrimary: 'Set as Primary Key',
+                menuSecondary: 'Set as Secondary Key',
+                menuValue: 'Set as Value Column',
+                menuClear: 'Clear Selection',
+                primaryKeyTag: ' [PK]',
+                secondaryKeyTag: ' [SK]',
+                valueTag: ' [Val]',
+                rows: 'rows',
+                cols: 'cols',
+                primaryKeyLabel: 'Primary',
+                secondaryKeyLabel: 'Secondary',
+                leftValueLabel: 'Left Value',
+                rightValueLabel: 'Right Value',
+                noSelection: 'Right-click column header to set type',
+                errorPrimaryKey: 'Please set a primary key column first (right-click header)',
+                errorValueColumn: 'Please set at least one value column (right-click header)',
+                successMessage: 'Rules saved successfully',
+                closeConfirm: 'Rules saved. Close preview service?',
+                ruleSaved: 'Rules saved: {count} file pairs will use this configuration'
+            }
+        };
+
+        let currentLang = 'zh';
+        let appData = null;
+        let currentPair = null;
+        let leftColumns = [];
+        let rightColumns = [];
+        let commonColumns = [];
+        
+        let primaryKey = '';
+        let secondaryKeys = new Set();
+        let leftValueColumns = new Set();
+        let rightValueColumns = new Set();
+        
+        let contextMenuTarget = null;
+
+        function t(key) {
+            return translations[currentLang][key] || key;
+        }
+
+        function switchLang(lang) {
+            currentLang = lang;
+            localStorage.setItem('excel_compare_lang', lang);
+            document.documentElement.lang = lang === 'zh' ? 'zh-CN' : 'en';
+            
+            // Update active state
+            document.querySelectorAll('.lang-option').forEach(el => {
+                el.classList.toggle('active', el.textContent === (lang === 'zh' ? '中文' : 'English'));
+            });
+            
+            // Update all UI text
+            updateUIText();
+            
+            // Close dropdown
+            document.getElementById('langDropdown').classList.remove('show');
+        }
+
+        function toggleLangDropdown(event) {
+            event.stopPropagation();
+            document.getElementById('langDropdown').classList.toggle('show');
+        }
+
+        function updateUIText() {
+            document.getElementById('appTitle').textContent = t('title');
+            document.getElementById('headerInfo').textContent = appData ? 
+                `Left: ${appData.left_dir} | Right: ${appData.right_dir}` : t('loading');
+            document.getElementById('sidebarTitle').innerHTML = 
+                `${t('sidebarTitle')} (<span id="pairCount">${appData ? appData.paired_files.length : 0}</span> ${t('pairs')})`;
+            document.getElementById('legendTitle').textContent = t('legendTitle');
+            document.getElementById('legendPrimary').textContent = t('legendPrimary');
+            document.getElementById('legendSecondary').textContent = t('legendSecondary');
+            document.getElementById('legendValue').textContent = t('legendValue');
+            document.getElementById('legendHint').textContent = t('legendHint');
+            document.getElementById('leftTitle').textContent = t('leftFile');
+            document.getElementById('rightTitle').textContent = t('rightFile');
+            document.getElementById('leftPlaceholder').textContent = t('selectFile');
+            document.getElementById('rightPlaceholder').textContent = t('selectFile');
+            document.getElementById('notesTitle').textContent = t('notesTitle');
+            document.getElementById('compareNotes').placeholder = t('notesPlaceholder');
+            document.getElementById('statusInfo').textContent = t('statusHint');
+            document.getElementById('confirmBtn').textContent = t('confirmBtn');
+            document.getElementById('menuPrimary').textContent = t('menuPrimary');
+            document.getElementById('menuSecondary').textContent = t('menuSecondary');
+            document.getElementById('menuValue').textContent = t('menuValue');
+            document.getElementById('menuClear').textContent = t('menuClear');
+            
+            // Update CSS pseudo-elements
+            document.querySelectorAll('th.primary-key').forEach(el => {
+                el.style.setProperty('--tag', `"${t('primaryKeyTag')}"`);
+            });
+        }
+
+        function initLang() {
+            const savedLang = localStorage.getItem('excel_compare_lang') || 'zh';
+            switchLang(savedLang);
+        }
+
+        async function init() {
+            initLang();
+            
+            const resp = await fetch('/api/init');
+            appData = await resp.json();
+            
+            document.getElementById('headerInfo').textContent = 
+                `Left: ${appData.left_dir} | Right: ${appData.right_dir}`;
+            document.getElementById('pairCount').textContent = appData.paired_files.length;
+            
+            renderFileList();
+            
+            if (appData.paired_files.length > 0) {
+                loadPair(appData.paired_files[0]);
+            }
+            
+            document.addEventListener('click', () => {
+                document.getElementById('contextMenu').classList.remove('show');
+                document.getElementById('langDropdown').classList.remove('show');
+            });
+        }
+
+        function renderFileList() {
+            const list = document.getElementById('fileList');
+            list.innerHTML = appData.paired_files.map(f => `
+                <div class="file-item" onclick="loadPair('${f}')" id="file-${f.replace(/\./g, '-')}">
+                    <div class="name">${f}</div>
+                </div>
+            `).join('');
+        }
+
+        async function loadPair(filename) {
+            currentPair = filename;
+            
+            document.querySelectorAll('.file-item').forEach(el => el.classList.remove('active'));
+            const el = document.getElementById(`file-${filename.replace(/\./g, '-')}`);
+            if (el) el.classList.add('active');
+            
+            const resp = await fetch(`/api/pair?name=${encodeURIComponent(filename)}`);
+            const result = await resp.json();
+            
+            if (result.status !== 'success') {
+                showToast(result.message, 'error');
+                return;
+            }
+            
+            leftColumns = result.left.columns;
+            rightColumns = result.right.columns;
+            commonColumns = result.common_columns;
+            
+            document.getElementById('leftTitle').textContent = result.left.name;
+            document.getElementById('leftInfo').textContent = `${result.left.rows} ${t('rows')} × ${result.left.columns.length} ${t('cols')}`;
+            document.getElementById('rightTitle').textContent = result.right.name;
+            document.getElementById('rightInfo').textContent = `${result.right.rows} ${t('rows')} × ${result.right.columns.length} ${t('cols')}`;
+            
+            renderTable('leftTable', result.left.data, result.left.columns, 'left');
+            renderTable('rightTable', result.right.data, result.right.columns, 'right');
+            
+            updateStatusInfo();
+        }
+
+        function renderTable(containerId, data, columns, side) {
+            const container = document.getElementById(containerId);
+            
+            let html = '<table><thead><tr>';
+            columns.forEach(c => {
+                let className = '';
+                if (c === primaryKey) className = 'primary-key';
+                else if (secondaryKeys.has(c)) className = 'secondary-key';
+                else if (side === 'left' && leftValueColumns.has(c)) className = 'value-col';
+                else if (side === 'right' && rightValueColumns.has(c)) className = 'value-col';
+                
+                html += `<th class="${className}" 
+                          data-column="${c}" 
+                          data-side="${side}"
+                          oncontextmenu="showContextMenu(event, '${c}', '${side}')"
+                          onclick="showContextMenu(event, '${c}', '${side}')">${c}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+            
+            data.forEach(row => {
+                html += '<tr>';
+                columns.forEach(c => {
+                    html += `<td>${row[c] || ''}</td>`;
+                });
+                html += '</tr>';
+            });
+            
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function showContextMenu(event, column, side) {
+            event.preventDefault();
+            event.stopPropagation();
+            
+            contextMenuTarget = { column, side };
+            
+            const menu = document.getElementById('contextMenu');
+            menu.style.left = event.clientX + 'px';
+            menu.style.top = event.clientY + 'px';
+            menu.classList.add('show');
+        }
+
+        function setColumnType(type) {
+            if (!contextMenuTarget) return;
+            
+            const { column, side } = contextMenuTarget;
+            
+            if (type === 'primary') {
+                if (primaryKey === column) {
+                    primaryKey = '';
+                } else {
+                    primaryKey = column;
+                    secondaryKeys.delete(column);
+                    leftValueColumns.delete(column);
+                    rightValueColumns.delete(column);
+                }
+            } else if (type === 'secondary') {
+                if (secondaryKeys.has(column)) {
+                    secondaryKeys.delete(column);
+                } else {
+                    secondaryKeys.add(column);
+                    if (primaryKey === column) primaryKey = '';
+                    leftValueColumns.delete(column);
+                    rightValueColumns.delete(column);
+                }
+            } else if (type === 'value') {
+                if (side === 'left') {
+                    if (leftValueColumns.has(column)) {
+                        leftValueColumns.delete(column);
+                    } else {
+                        leftValueColumns.add(column);
+                        if (primaryKey === column) primaryKey = '';
+                        secondaryKeys.delete(column);
+                    }
+                } else {
+                    if (rightValueColumns.has(column)) {
+                        rightValueColumns.delete(column);
+                    } else {
+                        rightValueColumns.add(column);
+                        if (primaryKey === column) primaryKey = '';
+                        secondaryKeys.delete(column);
+                    }
+                }
+            } else if (type === 'clear') {
+                if (primaryKey === column) primaryKey = '';
+                secondaryKeys.delete(column);
+                leftValueColumns.delete(column);
+                rightValueColumns.delete(column);
+            }
+            
+            document.getElementById('contextMenu').classList.remove('show');
+            
+            refreshTableHeaders();
+            updateStatusInfo();
+        }
+
+        function refreshTableHeaders() {
+            document.querySelectorAll('#leftTable th').forEach(th => {
+                const col = th.dataset.column;
+                th.className = '';
+                if (col === primaryKey) th.className = 'primary-key';
+                else if (secondaryKeys.has(col)) th.className = 'secondary-key';
+                else if (leftValueColumns.has(col)) th.className = 'value-col';
+            });
+            
+            document.querySelectorAll('#rightTable th').forEach(th => {
+                const col = th.dataset.column;
+                th.className = '';
+                if (col === primaryKey) th.className = 'primary-key';
+                else if (secondaryKeys.has(col)) th.className = 'secondary-key';
+                else if (rightValueColumns.has(col)) th.className = 'value-col';
+            });
+        }
+
+        function updateStatusInfo() {
+            const info = document.getElementById('statusInfo');
+            const parts = [];
+            if (primaryKey) parts.push(`${t('primaryKeyLabel')}: ${primaryKey}`);
+            if (secondaryKeys.size > 0) parts.push(`${t('secondaryKeyLabel')}: ${Array.from(secondaryKeys).join(', ')}`);
+            if (leftValueColumns.size > 0) parts.push(`${t('leftValueLabel')}: ${Array.from(leftValueColumns).join(', ')}`);
+            if (rightValueColumns.size > 0) parts.push(`${t('rightValueLabel')}: ${Array.from(rightValueColumns).join(', ')}`);
+            
+            info.textContent = parts.length > 0 ? parts.join(' | ') : t('noSelection');
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        }
+
+        async function confirmAndSave() {
+            if (!primaryKey) {
+                showToast(t('errorPrimaryKey'), 'error');
+                return;
+            }
+            if (leftValueColumns.size === 0 && rightValueColumns.size === 0) {
+                showToast(t('errorValueColumn'), 'error');
+                return;
+            }
+            
+            const notes = document.getElementById('compareNotes').value;
+            
+            const config = {
+                primary_key: primaryKey,
+                secondary_keys: Array.from(secondaryKeys),
+                left_value_columns: Array.from(leftValueColumns),
+                right_value_columns: Array.from(rightValueColumns),
+                notes: notes
+            };
+            
+            const resp = await fetch('/api/confirm', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(config)
+            });
+            
+            const result = await resp.json();
+            if (result.status === 'success') {
+                showToast(t('successMessage'), 'success');
+                document.getElementById('statusInfo').textContent = 
+                    t('ruleSaved').replace('{count}', result.paired_count);
+                
+                setTimeout(() => {
+                    if (confirm(t('closeConfirm'))) {
+                        fetch('/api/shutdown', {method: 'POST'}).then(() => window.close());
+                    }
+                }, 1000);
+            } else {
+                showToast(result.message, 'error');
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>

@@ -1,0 +1,6 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+workspace/ export-ignore
+**/__pycache__/ export-ignore
+source/*
+workspace/*

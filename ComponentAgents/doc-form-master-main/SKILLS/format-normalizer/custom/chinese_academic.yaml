@@ -1,0 +1,351 @@
+paper_type: chinese_academic
+
+document:
+  language: chinese
+  citation_style: GB/T7714
+
+# =========================
+# 字体配置 (GB/T 7713.1-2006)
+# =========================
+
+fonts:
+
+  chinese:
+    family: 宋体
+    size: 12  # 小4号宋体
+
+  english:
+    family: Times New Roman
+    size: 12
+
+  heading:
+    family: 黑体
+
+# =========================
+# 页面配置 (GB/T 7713.1-2006)
+# =========================
+
+page:
+
+  margin_top: 2.54
+  margin_bottom: 2.54
+  margin_left: 3.17
+  margin_right: 2.54
+
+  page_size: A4
+
+# =========================
+# 段落配置 (GB/T 7713.1-2006)
+# =========================
+
+paragraph:
+
+  alignment: justify
+
+  line_spacing: 1.5
+
+  first_indent: 2
+
+  spacing_before: 0
+
+  spacing_after: 0
+
+  widow_control: true
+
+  keep_lines_together: true
+
+# =========================
+# 标题配置 (GB/T 7713.1-2006)
+# =========================
+
+heading:
+
+  numbering: true
+
+  level1:
+
+    font: 黑体
+
+    size: 14  # 4号黑体，居中
+
+    bold: true
+
+    alignment: center
+
+    spacing_before: 24
+
+    spacing_after: 18
+
+  level2:
+
+    font: 黑体
+
+    size: 12  # 小4号黑体，左对齐
+
+    bold: true
+
+    alignment: left
+
+    spacing_before: 18
+
+    spacing_after: 12
+
+  level3:
+
+    font: 宋体
+
+    size: 12  # 小4号宋体，左对齐
+
+    bold: true
+
+    alignment: left
+
+# =========================
+# 目录配置
+# =========================
+
+toc:
+
+  enabled: true
+
+  max_level: 3
+
+# =========================
+# 页眉页脚
+# =========================
+
+header:
+
+  enabled: true
+
+  alignment: center
+
+footer:
+
+  page_number: true
+
+  alignment: center
+
+# =========================
+# 表格配置
+# =========================
+
+table:
+
+  alignment: center
+
+  auto_fit: true
+
+  border: three-line
+
+  cell_margin: 0.1
+
+  keep_together: true
+
+  header_font_size: 10.5
+
+  cell_font_size: 10.5
+
+  cell_line_spacing: 1.0
+
+caption:
+
+  table:
+
+    position: top
+
+    alignment: center
+
+    font_size: 10.5
+
+    bold: true
+
+  figure:
+
+    position: bottom
+
+    alignment: center
+
+    font_size: 10.5
+
+    bold: true
+
+# =========================
+# 图片配置
+# =========================
+
+image:
+
+  alignment: center
+
+  keep_ratio: true
+
+  max_width_percent: 80
+
+  avoid_page_break: true
+
+  keep_with_caption: true
+
+  spacing_before: 12
+
+  spacing_after: 12
+
+# =========================
+# 数学公式配置
+# =========================
+
+formula:
+
+  preserve_omml: true
+
+  preserve_mathtype: true
+
+  preserve_latex: true
+
+  auto_numbering: true
+
+  alignment: center
+
+  spacing_before: 12
+
+  spacing_after: 12
+
+  inline_formula:
+
+    keep_inline: true
+
+    font_size: 12
+
+  block_formula:
+
+    alignment: center
+
+    numbering_alignment: right
+
+# =========================
+# 代码块配置
+# =========================
+
+codeblock:
+
+  preserve_indent: true
+
+  preserve_line_break: true
+
+  preserve_comments: true
+
+  auto_wrap: false
+
+  alignment: left
+
+  background_color: "#F5F5F5"
+
+  border: single
+
+  spacing_before: 12
+
+  spacing_after: 12
+
+  padding: 6
+
+  font:
+
+    family: Consolas
+
+    fallback: Courier New
+
+    size: 10
+
+# =========================
+# 参考文献配置
+# =========================
+
+references:
+
+  standard: GB/T7714
+
+  font_chinese: 宋体
+
+  font_english: Times New Roman
+
+  size: 10.5
+
+  line_spacing: fixed
+
+  hanging_indent: 2
+
+# =========================
+# 脚注配置
+# =========================
+
+footnote:
+
+  enabled: true
+
+  font_size_cn: 10.5
+
+  font_size_en: 9
+
+  line_spacing: single
+
+  numbering: circled
+
+  restart_per_page: true
+
+  separator_length: 25
+
+  font_name_cn: 宋体
+
+  font_name_en: Times New Roman
+
+  first_line_indent: 0
+
+# =========================
+# 安全保护规则
+# =========================
+
+protection:
+
+  preserve_formulas: true
+
+  preserve_images: true
+
+  preserve_tables: true
+
+  preserve_codeblocks: true
+
+  preserve_references: true
+
+  preserve_relationships: true
+
+  preserve_xml_structure: true
+
+# =========================
+# DOCX兼容性
+# =========================
+
+compatibility:
+
+  microsoft_word: true
+
+  wps: true
+
+  libreoffice: true
+
+  macos_word: true
+
+# =========================
+# XML安全规则
+# =========================
+
+xml_safety:
+
+  preserve_namespace: true
+
+  preserve_relationship_id: true
+
+  preserve_styles_xml: true
+
+  preserve_numbering_xml: true
+
+  preserve_section_properties: true

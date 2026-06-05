@@ -1,0 +1,9 @@
+# 忽略整个 workspace 文件夹
+workspace/
+
+# 忽略所有 .xlsx 文件
+*.xlsx
+*.xls
+
+# 忽略所有 .pyc 文件
+*.pyc

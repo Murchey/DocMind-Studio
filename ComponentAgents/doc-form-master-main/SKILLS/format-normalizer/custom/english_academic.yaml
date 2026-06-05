@@ -1,0 +1,116 @@
+paper_type: english_academic
+
+document:
+  language: english
+  citation_style: APA
+
+fonts:
+  english: Times New Roman
+  chinese: SimSun
+
+font_size:
+  body: 12
+  heading1: 12
+  heading2: 12
+  heading3: 12
+
+paragraph:
+  line_spacing: double
+  first_indent: 1.27
+  alignment: left
+  spacing_before: 0
+  spacing_after: 0
+
+page:
+  margin_top: 2.54
+  margin_bottom: 2.54
+  margin_left: 2.54
+  margin_right: 2.54
+
+heading:
+
+  level1:
+    font: Times New Roman
+    size: 12
+    bold: true
+    alignment: center
+    spacing_before: 24
+    spacing_after: 12
+
+  level2:
+    font: Times New Roman
+    size: 12
+    bold: true
+    alignment: left
+    spacing_before: 18
+    spacing_after: 8
+
+  level3:
+    font: Times New Roman
+    size: 12
+    bold: true
+    italic: true
+    alignment: left
+
+table:
+  alignment: center
+  auto_fit: true
+  border: three-line
+  cell_margin: 0.1
+  header_font_size: 10.5
+  cell_font_size: 10.5
+  cell_line_spacing: 1.0
+
+caption:
+  table:
+    position: top
+    alignment: center
+    font_size: 10.5
+    bold: true
+  figure:
+    position: bottom
+    alignment: center
+    font_size: 10.5
+    bold: true
+
+figure:
+  alignment: center
+  caption_position: bottom
+  keep_with_next: true
+
+codeblock:
+  font: Consolas
+  size: 10
+  line_spacing: single
+  keep_indent: true
+
+references:
+  font: Times New Roman
+  size: 12
+  hanging_indent: 2
+
+toc:
+  enabled: true
+  max_level: 3
+
+pagination:
+  widow_control: true
+  keep_heading_with_content: true
+
+footnote:
+  enabled: true
+  font_size_cn: 9
+  font_size_en: 8
+  line_spacing: single
+  numbering: arabic
+  restart_per_page: true
+  separator_length: 25
+  font_name_cn: 宋体
+  font_name_en: Times New Roman
+  first_line_indent: 0
+
+protection:
+  preserve_formulas: true
+  preserve_images: true
+  preserve_codeblocks: true
+  preserve_references: true

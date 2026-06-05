@@ -1,0 +1,69 @@
+# Workspace - runtime generated files
+workspace/
+!workspace/.gitkeep
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Test files
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Output files
+*.pdf
+*.docx
+!SKILLS/**/*.docx
+
+# Custom templates (user created)
+SKILLS/format-normalizer/custom/*.yaml
+SKILLS/format-normalizer/custom/*.json
+!SKILLS/format-normalizer/custom/chinese_academic.yaml
+!SKILLS/format-normalizer/custom/english_academic.yaml

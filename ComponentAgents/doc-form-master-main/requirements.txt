@@ -1,0 +1,36 @@
+# DOCX Master - Python Dependencies
+
+# Core DOCX processing
+python-docx>=0.8.11
+lxml>=4.9.0
+
+# Image processing
+Pillow>=9.0.0
+
+# YAML template support
+pyyaml>=6.0
+
+# PDF export
+docx2pdf>=0.1.8
+PyPDF2>=3.0.0
+
+# Windows COM automation (for docx2pdf)
+pywin32>=305; sys_platform == "win32"
+
+# JSON schema validation
+jsonschema>=4.0.0
+
+# Translation
+deep-translator>=1.11.0
+langdetect>=1.0.9
+
+# Font management
+matplotlib>=3.5.0
+fonttools>=4.0.0
+
+# Web preview server
+Flask>=2.0.0
+
+# External dependencies (install separately):
+# - pandoc: winget install JohnMacFarlane.Pandoc (for markdown-converter)
+# - Microsoft Word or LibreOffice: for doc-compatibility and pdf-export
