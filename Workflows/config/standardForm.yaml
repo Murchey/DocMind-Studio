@@ -1,0 +1,452 @@
+# ============================================================
+# Markdown Standard Form 规范
+# 适用于 AGENT.md 文档格式化流程
+# ============================================================
+# 本文件定义了 Markdown 源文件的标准结构规范
+# 确保通过 markdown-converter → docx-parser → format-normalizer
+# 流程后能生成符合学术论文规范的 DOCX 文档
+# ============================================================
+
+# 元信息配置
+metadata:
+  version: "1.0"
+  description: "Markdown 学术论文标准格式规范"
+  compatible_with: "AGENT.md 文档格式化流程"
+
+# ============================================================
+# 文档结构定义
+# ============================================================
+# 顺序：封面信息 → 中文摘要 → 英文摘要 → 目录(可选) → 正文 → 参考文献 → 附录(可选)
+
+document_structure:
+
+  # 封面信息（可选，由 preview-design 的 cover 配置处理）
+  cover:
+    enabled: false  # 设为 true 时在 preview-design 中配置
+    description: "封面信息通过 preview-design Web 界面配置，无需在 Markdown 中包含"
+
+  # 摘要部分
+  abstract:
+    enabled: true
+    description: "中文摘要和英文摘要，位于正文之前"
+
+  # 目录（自动生成）
+  toc:
+    enabled: true
+    description: "由 format-normalizer 自动生成，无需在 Markdown 中手写"
+
+  # 正文
+  body:
+    enabled: true
+    description: "论文主体内容"
+
+  # 参考文献
+  references:
+    enabled: true
+    description: "参考文献列表，必须使用特定关键词标记"
+
+  # 附录（可选）
+  appendix:
+    enabled: false
+    description: "附录内容，位于参考文献之后"
+
+# ============================================================
+# 标题层级规范
+# ============================================================
+# 注意：AGENT.md 的标题检测规则基于以下模式
+# 请严格遵循层级结构
+
+heading:
+
+  # H1：文档标题（一篇论文仅一个）
+  level1:
+    markdown: "# 标题"
+    detection_rules:
+      - "第X章/节/部分"
+      - "数字 + 空格 + 文本（如 '1  需求分析'）"
+      - "直接使用 # 标记"
+    format:
+      font: "黑体"
+      size: 14
+      alignment: "center"
+      bold: true
+    example: "# 氯苯那敏的合成"
+
+  # H2：章标题
+  level2:
+    markdown: "## 章标题"
+    detection_rules:
+      - "中文数字：一、二、三、四..."
+      - "关键词+冒号：引言/摘要/结论/参考文献"
+      - "直接使用 ## 标记"
+    format:
+      font: "黑体"
+      size: 14
+      alignment: "left"
+      bold: true
+    examples:
+      - "## 一、引言"
+      - "## 二、合成工艺"
+      - "## 三、结论"
+      - "## 四、参考文献"
+
+  # H3：节标题
+  level3:
+    markdown: "### 节标题"
+    detection_rules:
+      - "数字.数字（如 1.1 xxx）"
+      - "直接使用 ### 标记"
+    format:
+      font: "黑体"
+      size: 13
+      alignment: "left"
+      bold: true
+    examples:
+      - "### 1. 2-甲基吡啶的侧链卤代反应"
+      - "### 2. 亲电芳香取代反应"
+
+  # H4：子节标题（可选）
+  level4:
+    markdown: "#### 子节标题"
+    format:
+      font: "黑体"
+      size: 12
+      alignment: "left"
+      bold: true
+    example: "#### 1.1 反应方程式"
+
+# ============================================================
+# 内容块类型规范
+# ============================================================
+
+content_blocks:
+
+  # 数学公式
+  formula:
+    inline:
+      syntax: "$行内公式$"
+      example: "$\\text{Py}$ 代表 2-吡啶基"
+      notes: "行内公式保持在文本行中，不单独成段"
+    block:
+      syntax: "$$\\n块级公式\\n$$"
+      example: |
+        $$\text{Py-CH}_3 + \text{Cl}_2 \xrightarrow[\text{CCl}_4]{\text{Na}_2\text{CO}_3} \text{Py-CH}_2\text{Cl}$$
+      notes: "块级公式居中显示，前后各空一行"
+    latex_support:
+      - "\\text{}"
+      - "\\frac{}{}"
+      - "\\xrightarrow[]{}"
+      - "\\mathrm{}"
+      - "\\mathbf{}"
+      - "\\alpha, \\beta, \\gamma..."
+      - "\\rightarrow, \\leftarrow"
+      - "\\sum, \\int, \\prod"
+
+  # 表格
+  table:
+    syntax: |
+      | 列1 | 列2 | 列3 |
+      |-----|-----|-----|
+      | 数据 | 数据 | 数据 |
+    caption:
+      position: "above"
+      format: "表 X-X 标题内容"
+      example: "表 2-1 工作流节点类型表"
+    notes:
+      - "表格自动居中对齐"
+      - "自动应用三线表格式"
+      - "表头自动加粗"
+
+  # 图片
+  image:
+    syntax: "![图片说明](图片路径)"
+    supported_formats:
+      - png
+      - jpg
+      - jpeg
+      - gif
+      - svg
+    notes:
+      - "图片自动居中对齐"
+      - "建议使用相对路径"
+      - "图片说明自动转为题注"
+
+  # 代码块
+  codeblock:
+    syntax: |
+      ```语言
+      代码内容
+      ```
+    example: |
+      ```python
+      def hello():
+          print("Hello, World!")
+      ```
+    notes: "代码块使用等宽字体（Consolas）"
+
+  # 列表
+  list:
+    unordered:
+      syntax: "- 项目内容"
+      example: |
+        - 第一项
+        - 第二项
+        - 第三项
+    ordered:
+      syntax: "1. 项目内容"
+      example: |
+        1. 第一项
+        2. 第二项
+        3. 第三项
+
+  # 引用块
+  blockquote:
+    syntax: "> 引用内容"
+    example: |
+      > 这是一段引用内容。
+      > 可以跨多行。
+    notes: "引用块自动添加左缩进和竖线"
+
+  # 脚注
+  footnote:
+    syntax: "正文内容[^1]"
+    definition: "[^1]: 脚注内容"
+    example: |
+      这是一段正文[^1]，包含脚注引用。
+
+      [^1]: 这是脚注的具体内容。
+    notes:
+      - "脚注自动格式化为上标编号"
+      - "脚注内容自动移到页面底部"
+      - "脚注使用小五号字体（9pt）"
+
+  # 超链接
+  link:
+    syntax: "[链接文字](URL)"
+    example: "[Google](https://www.google.com)"
+    notes: "超链接自动添加下划线和颜色"
+
+# ============================================================
+# 摘要规范
+# ============================================================
+
+abstract:
+
+  # 中文摘要
+  chinese:
+    keywords_marker: "**关键词:**"
+    format:
+      - "**摘要:**" 后接摘要内容（粗体标记）
+      - "**关键词:**" 后接关键词列表（粗体标记）
+      - 关键词之间用分号（；）分隔
+    example: |
+      **摘要:** 本研究以经典抗组胺药物氯苯那敏为核心研究对象...
+      **关键词:** 氯苯那敏；合成工艺；反应机理；亲核取代；药物合成
+
+  # 英文摘要
+  english:
+    keywords_marker: "**Key words:**"
+    format:
+      - "**Abstract:**" 后接摘要内容（粗体标记）
+      - "**Key words:**" 后接关键词列表（粗体标记）
+      - 关键词之间用分号（;）分隔
+    example: |
+      **Abstract:** This study focuses on the classic antihistamine drug chlorphenamine...
+      **Key words:** Chlorphenamine; Synthesis process; Reaction mechanism; Nucleophilic substitution; Drug synthesis
+
+# ============================================================
+# 参考文献规范
+# ============================================================
+# 注意：AGENT.md 使用模式匹配检测参考文献
+
+references:
+
+  # 标记关键词（必须包含以下任一关键词）
+  markers:
+    - "参考文献"
+    - "References"
+    - "Bibliography"
+
+  # 格式规范
+  format:
+    standard: "GB/T 7714-2015"
+    numbering: "顺序编码制 [1] [2] [3]..."
+    font:
+      chinese: "宋体"
+      english: "Times New Roman"
+      size: 10.5
+
+  # 参考文献类型示例
+  examples:
+    book: "[1] 作者. 书名[M]. 出版地: 出版社, 年份."
+    journal: "[2] 作者. 文章标题[J]. 期刊名, 年份, 卷(期): 页码."
+    conference: "[3] 作者. 论文标题[C]//会议名称. 出版地: 出版社, 年份: 页码."
+    thesis: "[4] 作者. 论文标题[D]. 学校所在地: 学校名称, 年份."
+    standard: "[5] 标准编号, 标准名称[S]. 出版地: 出版社, 年份."
+    online: "[6] 作者. 文章标题[EB/OL]. (发布日期)[引用日期]. URL."
+
+  notes:
+    - "参考文献会自动分页显示"
+    - "参考文献前会自动添加分页符和分节符"
+    - "确保参考文献关键词单独成行（如 '## 四、参考文献'）"
+
+# ============================================================
+# 特殊标记规范
+# ============================================================
+
+special_markers:
+
+  # 粗体标记（用于摘要关键词等）
+  bold:
+    syntax: "**粗体内容**"
+    use_cases:
+      - "摘要和关键词标记"
+      - "术语强调"
+      - "小节标题（如 **1.1 反应方程式**）"
+
+  # 斜体标记
+  italic:
+    syntax: "*斜体内容*"
+    use_cases:
+      - "注释说明"
+      - "外来术语"
+      - "强调内容"
+
+  # 行内代码
+  inline_code:
+    syntax: "`代码内容`"
+    use_cases:
+      - "变量名、函数名"
+      - "命令行指令"
+      - "文件路径"
+
+  # 分隔线
+  horizontal_rule:
+    syntax: "---"
+    notes: "分隔线在 DOCX 中不显示，可用于标记章节边界"
+
+# ============================================================
+# 完整文档模板
+# ============================================================
+
+template:
+
+  description: "以下是一个完整的 Markdown 论文模板结构"
+
+  structure: |
+    # 论文标题
+
+    作者1, 作者2, 作者3
+    (单位信息)
+
+    **摘要:** 摘要内容...
+    **关键词:** 关键词1；关键词2；关键词3
+
+    **English Title**
+
+    Author1, Author2, Author3
+    *(Institution, City Postal Code, Country)*
+
+    **Abstract:** Abstract content...
+    **Key words:** keyword1; keyword2; keyword3
+
+    ## 一、引言
+    引言内容...
+
+    ## 二、方法
+    方法内容...
+
+    ### 1. 方法一
+    方法一内容...
+
+    ### 2. 方法二
+    方法二内容...
+
+    ## 三、结果
+    结果内容...
+
+    ## 四、结论
+    结论内容...
+
+    ## 五、参考文献
+    [1] 参考文献1...
+    [2] 参考文献2...
+
+# ============================================================
+# 常见问题与注意事项
+# ============================================================
+
+faq:
+
+  - question: "为什么我的标题没有被正确识别？"
+    answer: |
+      确保标题使用正确的 Markdown 语法：
+      - H1: # 标题
+      - H2: ## 标题
+      - H3: ### 标题
+      避免在标题前后添加多余空格。
+
+  - question: "公式显示不正确怎么办？"
+    answer: |
+      确保公式使用正确的 LaTeX 语法：
+      - 行内公式：$公式$
+      - 块级公式：$$公式$$
+      使用 \\text{} 包裹中文内容。
+
+  - question: "参考文献为什么没有自动分页？"
+    answer: |
+      确保参考文献章节标题包含以下关键词之一：
+      - 参考文献
+      - References
+      - Bibliography
+      并使用 H2（##）标记。
+
+  - question: "如何添加脚注？"
+    answer: |
+      在正文中使用 [^编号] 引用，在文档末尾定义：
+      正文内容[^1]
+      [^1]: 脚注具体内容
+
+  - question: "表格如何添加标题？"
+    answer: |
+      在表格上方添加标题行：
+      表 2-1 表格标题
+      | 列1 | 列2 |
+      |-----|-----|
+      | 数据 | 数据 |
+
+# ============================================================
+# 质量检查清单
+# ============================================================
+
+checklist:
+
+  structure:
+    - "文档标题使用 # H1"
+    - "章标题使用 ## H2"
+    - "节标题使用 ### H3"
+    - "标题层级不跳级（如 H1 后直接 H3）"
+
+  abstract:
+    - "中文摘要使用 **摘要:** 标记"
+    - "中文关键词使用 **关键词:** 标记"
+    - "英文摘要使用 **Abstract:** 标记"
+    - "英文关键词使用 **Key words:** 标记"
+
+  formula:
+    - "行内公式使用 $ 包裹"
+    - "块级公式使用 $$ 包裹"
+    - "公式中的中文使用 \\text{} 包裹"
+
+  references:
+    - "参考文献标题包含 '参考文献' 或 'References'"
+    - "参考文献使用 [编号] 格式"
+    - "参考文献使用 H2（##）标记"
+
+  table:
+    - "表格使用标准 Markdown 语法"
+    - "表格标题使用 '表 X-X' 格式"
+
+  footnote:
+    - "脚注引用使用 [^编号] 格式"
+    - "脚注定义使用 [^编号]: 内容 格式"
