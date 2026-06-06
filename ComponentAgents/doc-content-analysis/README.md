@@ -6,13 +6,13 @@
 
 **Document Content Reading & Analysis Agent**
 
-*Effortlessly extract, parse, and analyze content from DOC and PDF documents using AI-powered intelligent processing.*
+*Batch convert, extract, and summarize content from DOC/DOCX/PDF documents with structured JSON output for multi-agent integration.*
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-green.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
 
-[Quick Start](#quick-start) · [Features](#features) · [Architecture](#architecture) · [Documentation](#documentation)
+[Quick Start](#quick-start) · [Features](#features) · [Architecture](#architecture) · [Multi-Agent Integration](#multi-agent-integration)
 
 </div>
 
@@ -20,15 +20,15 @@
 
 ## Why doc-content-analysis?
 
-Extracting and understanding document content is the foundation of intelligent document processing. **doc-content-analysis** provides a robust, modular pipeline for reading and analyzing DOC/DOCX and PDF files:
+Batch document summarization is a core capability for knowledge base generation. **doc-content-analysis** provides a complete pipeline for converting, extracting, and summarizing multiple documents:
 
 | Challenge | Solution |
 |-----------|----------|
-| ❌ Manual copy-paste and reading | ✅ Automated document parsing |
-| ❌ PDF text extraction with layout loss | ✅ Intelligent layout-aware extraction |
-| ❌ Mixed content (text, tables, images) | ✅ Structured content output |
-| ❌ Difficult cross-document comparison | ✅ Unified content representation |
-| ❌ No metadata or structure info | ✅ Rich document metadata extraction |
+| ❌ Manual reading of multiple documents | ✅ Batch processing pipeline |
+| ❌ PDF/DOC format incompatibility | ✅ Unified DOCX conversion |
+| ❌ No structured output for downstream | ✅ JSON + MD dual output |
+| ❌ Image content locked in documents | ✅ Image extraction + OCR |
+| ❌ No processing traceability | ✅ manifest.json tracking |
 
 ---
 
@@ -36,33 +36,50 @@ Extracting and understanding document content is the foundation of intelligent d
 
 ### 🎯 Core Capabilities
 
-- **Multi-Format Support** - Read both DOC/DOCX and PDF documents seamlessly
-- **Intelligent Content Extraction** - Extract text, tables, images, headers, footnotes, and metadata
-- **Structured Output** - Generate structured JSON representations of document content
-- **Non-Destructive Processing** - Original files are never modified
+- **Batch Processing** - Process multiple DOC/DOCX/PDF/TXT files in one run
+- **Format Conversion** - Automatic `.doc` → `.docx`, `.pdf` → `.docx` conversion
+- **Content Extraction** - Extract paragraphs, headings, tables, and metadata
+- **Image Extraction** - Extract all embedded images from documents
+- **Dual Output** - Structured JSON (for agents) + readable MD (for humans)
 
 ### 📄 Format Support
 
-| Format | Extension | Description |
-|--------|-----------|-------------|
-| Microsoft Word | `.doc`, `.docx` | Word documents with full structure preservation |
-| PDF | `.pdf` | Portable Document Format with layout-aware extraction |
-| Plain Text | `.txt` | Plain text file reading and processing |
+| Format | Extension | Processing |
+|--------|-----------|------------|
+| Microsoft Word (legacy) | `.doc` | Convert to .docx via win32com/LibreOffice |
+| Microsoft Word | `.docx` | Direct content extraction |
+| PDF | `.pdf` | Convert to .docx via pdf2docx |
+| Plain Text | `.txt` | Direct text extraction |
 
-### 🔧 Processing Features
+### 🔧 Processing Pipeline
 
-- **DOC/DOCX Parsing** - Extract paragraphs, headings, tables, images, hyperlinks, and styles
-- **PDF Parsing** - Extract text blocks, tables, images, and page-level content with layout analysis
-- **Metadata Extraction** - Title, author, creation date, modification date, page count
-- **Content Summarization** - AI-powered document summary and key point extraction
-- **Table Extraction** - Detect and extract tables with row/column structure
-- **Heading Hierarchy** - Detect and reconstruct document heading hierarchy
+```mermaid
+graph LR
+    A[workspace/input/] --> B[doc-convertor]
+    B --> C[workspace/converted/]
+    C --> D[Content Extraction]
+    D --> E[workspace/summary/]
+    E --> F[AI Summary]
+    F --> G[manifest.json]
+    G --> H[Downstream Agent]
+```
 
-### 📊 Analysis Features
+### 📊 Output Structure
 
-- **Document Structure Analysis** - Identify document sections, chapters, and logical flow
-- **Key Information Extraction** - Pull out important entities, dates, numbers, and references
-- **Content Quality Assessment** - Evaluate document completeness and structure quality
+```
+workspace/summary/
+├── manifest.json              # Processing manifest (for orchestrator)
+├── <doc_name>/
+│   ├── text/
+│   │   ├── content.json       # Structured document content
+│   │   ├── summary.json       # Structured summary (for agents)
+│   │   └── summary.md         # Readable summary (for humans)
+│   └── img/
+│       ├── image_1.png
+│       ├── text/              # OCR results (optional)
+│       └── img-summary/       # AI vision summary (optional)
+└── 综合总结.json               # Combined summary (multi-doc)
+```
 
 ---
 
@@ -71,64 +88,75 @@ Extracting and understanding document content is the foundation of intelligent d
 ### 1. Install
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/doc-content-analysis.git
 cd doc-content-analysis
-
-# Install dependencies
 pip install -r requirements.txt
 ```
 
-### 2. Run
+### 2. Place Documents
 
 ```bash
-# Open your AI IDE or Agent software (e.g., Trae, Cursor, Windsurf)
-# Load AGENT.md as the agent configuration
-# Then describe your requirements:
-"Read and summarize this DOCX file"
-"Extract all tables from this PDF"
-"Analyze the document structure of this report"
+# Copy your documents to workspace/input/
+cp /path/to/documents/*.docx workspace/input/
 ```
 
-### 3. Done!
+### 3. Run
 
-Analysis results will be in `workspace/output/`
-
----
-
-## Demo
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  📂 Input: research_paper.docx / report.pdf                │
-├─────────────────────────────────────────────────────────────┤
-│  ↓ doc-content-analysis processes...                        │
-│    ✓ Detect file format                                     │
-│    ✓ Parse document structure                               │
-│    ✓ Extract text content                                   │
-│    ✓ Extract tables and images                              │
-│    ✓ Build content outline                                  │
-│    ✓ Generate analysis report                               │
-├─────────────────────────────────────────────────────────────┤
-│  📊 Output: content_analysis.json / summary.md              │
-└─────────────────────────────────────────────────────────────┘
+```bash
+# Load AGENT.md in your AI IDE (Trae, Cursor, Windsurf)
+# The agent will automatically:
+# 1. Convert .doc/.pdf to .docx
+# 2. Extract content and images
+# 3. Generate structured summaries
+# 4. Output manifest.json for downstream consumption
 ```
 
 ---
 
-## Architecture
+## Multi-Agent Integration
 
-```mermaid
-graph LR
-    A[Input Document<br/>DOC/PDF] --> B[Format Detection]
-    B --> C{File Type?}
-    C -->|DOC/DOCX| D[DOCX Parser]
-    C -->|PDF| E[PDF Parser]
-    D --> F[Content Extractor]
-    E --> F
-    F --> G[Structure Analyzer]
-    G --> H[Content Summarizer]
-    H --> I[Structured Output<br/>JSON/MD]
+This agent is designed to operate as part of a multi-agent project:
+
+### Input Contract
+
+```
+workspace/input/
+├── *.doc        # Legacy Word documents
+├── *.docx       # Word documents
+├── *.pdf        # PDF documents
+└── *.txt        # Plain text files
+```
+
+### Output Contract
+
+**manifest.json** — The orchestrator reads this file to get processing results:
+
+```json
+{
+  "status": "completed",
+  "total_files": 3,
+  "success_count": 2,
+  "failed_count": 1,
+  "documents": [
+    {
+      "source_file": "report.docx",
+      "status": "success",
+      "summary_json": "workspace/summary/report/text/summary.json",
+      "summary_md": "workspace/summary/report/text/summary.md"
+    }
+  ]
+}
+```
+
+**summary.json** — Structured summary for downstream agent consumption:
+
+```json
+{
+  "title": "Document Title",
+  "summary": "One-paragraph overview...",
+  "sections": [{"heading": "...", "key_points": ["..."]}],
+  "key_info": {"data": ["..."], "conclusions": ["..."]},
+  "keywords": ["keyword1", "keyword2"]
+}
 ```
 
 ---
@@ -137,49 +165,40 @@ graph LR
 
 ```
 doc-content-analysis/
-├── AGENT.md                 # Agent configuration
-├── SKILLS/                  # Modular processing skills
-│   ├── docx-parser/         # DOCX document parsing
-│   ├── pdf-parser/          # PDF document parsing
-│   ├── content-extractor/   # Unified content extraction
-│   ├── structure-analyzer/  # Document structure analysis
-│   └── content-summarizer/  # AI-powered summarization
-├── workspace/               # Your documents
-│   ├── input/               # Place files here
-│   └── output/              # Get results here
-└── requirements.txt         # Dependencies
+├── AGENT.md                     # Agent configuration
+├── SKILLS/
+│   ├── doc-convertor/           # Document conversion & extraction
+│   │   ├── SKILL.MD
+│   │   └── scripts/doc_converter.py
+│   └── img-reader/              # Image OCR & vision analysis
+│       ├── SKILL.MD
+│       └── scripts/img_reader.py
+├── workspace/                   # Runtime workspace
+│   ├── input/                   # User documents (read-only)
+│   ├── converted/               # Converted .docx files
+│   └── summary/                 # Output summaries
+└── requirements.txt             # Dependencies
 ```
 
 ---
 
 ## Documentation
 
-- [Agent Configuration](AGENT.md) - Detailed processing rules and workflow
-- [Skills Reference](SKILLS/) - Skill module documentation
-
----
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+- [Agent Configuration](AGENT.md) - Workflow and integration contract
+- [doc-convertor Skill](SKILLS/doc-convertor/SKILL.MD) - Conversion and extraction
+- [img-reader Skill](SKILLS/img-reader/SKILL.MD) - Image OCR and analysis
 
 ---
 
 ## License
 
-This project is licensed under the GPL-3.0 License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GPL-3.0 License.
 
 ---
 
 <div align="center">
 
-**Made with ❤️ for document intelligence**
+**Part of DocMind Studio Multi-Agent System**
 
 [⬆ Back to top](#-doc-content-analysis)
 

@@ -1,0 +1,15 @@
+python-docx>=0.8.11
+pdf2docx>=0.5.6
+Pillow>=9.0
+pywin32>=306; sys_platform == "win32"
+
+# OCR dependencies (optional, install one of the following)
+# PaddleOCR (recommended for Chinese)
+# paddleocr>=2.6
+# paddlepaddle>=2.4
+
+# EasyOCR (multi-language)
+# easyocr>=1.6
+
+# Tesseract (requires system installation)
+# pytesseract>=0.3.10

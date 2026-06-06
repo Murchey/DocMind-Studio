@@ -6,13 +6,13 @@
 
 **文档内容读取与分析智能体**
 
-*轻松提取、解析和分析 DOC 和 PDF 文档内容，AI 驱动的智能文档处理。*
+*批量转换、提取和总结 DOC/DOCX/PDF 文档内容，输出结构化 JSON 供多 Agent 项目集成。*
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-green.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows-lightgrey.svg)](https://www.microsoft.com/windows)
 
-[快速开始](#快速开始) · [功能特性](#功能特性) · [架构设计](#架构设计) · [文档](#文档)
+[快速开始](#快速开始) · [功能特性](#功能特性) · [架构设计](#架构设计) · [多 Agent 集成](#多-agent-集成)
 
 </div>
 
@@ -20,15 +20,15 @@
 
 ## 为什么选择 doc-content-analysis？
 
-提取和理解文档内容是智能文档处理的基础。**doc-content-analysis** 提供了一套强大的模块化流水线，用于读取和分析 DOC/DOCX 及 PDF 文件：
+批量文档总结是知识库生成的核心能力。**doc-content-analysis** 提供了完整的文档转换、提取和总结流水线：
 
 | 痛点 | 解决方案 |
 |------|----------|
-| ❌ 手动复制粘贴阅读 | ✅ 自动化文档解析 |
-| ❌ PDF 提取文本丢失排版 | ✅ 智能布局感知提取 |
-| ❌ 混合内容（文本、表格、图片） | ✅ 结构化内容输出 |
-| ❌ 跨文档对比困难 | ✅ 统一内容表示 |
-| ❌ 缺少元数据和结构信息 | ✅ 丰富的文档元数据提取 |
+| ❌ 手动阅读多个文档 | ✅ 批量处理流水线 |
+| ❌ PDF/DOC 格式不兼容 | ✅ 统一 DOCX 转换 |
+| ❌ 无结构化输出供下游使用 | ✅ JSON + MD 双输出 |
+| ❌ 图片内容锁定在文档中 | ✅ 图片提取 + OCR |
+| ❌ 无处理可追溯性 | ✅ manifest.json 追踪 |
 
 ---
 
@@ -36,33 +36,50 @@
 
 ### 🎯 核心能力
 
-- **多格式支持** - 无缝读取 DOC/DOCX 和 PDF 文档
-- **智能内容提取** - 提取文本、表格、图片、页眉页脚和元数据
-- **结构化输出** - 生成结构化的 JSON 文档内容表示
-- **非破坏性处理** - 永远不会修改原始文件
+- **批量处理** - 一次运行处理多个 DOC/DOCX/PDF/TXT 文件
+- **格式转换** - 自动 `.doc` → `.docx`、`.pdf` → `.docx` 转换
+- **内容提取** - 提取段落、标题、表格和元数据
+- **图片提取** - 提取文档中所有嵌入图片
+- **双输出** - 结构化 JSON（供 Agent）+ 可读 MD（供人类）
 
 ### 📄 格式支持
 
-| 格式 | 扩展名 | 说明 |
-|------|--------|------|
-| Microsoft Word | `.doc`, `.docx` | 完整保留结构的 Word 文档 |
-| PDF | `.pdf` | 布局感知提取的便携式文档格式 |
-| 纯文本 | `.txt` | 纯文本文件读取和处理 |
+| 格式 | 扩展名 | 处理方式 |
+|------|--------|----------|
+| Microsoft Word（旧版） | `.doc` | 通过 win32com/LibreOffice 转换为 .docx |
+| Microsoft Word | `.docx` | 直接内容提取 |
+| PDF | `.pdf` | 通过 pdf2docx 转换为 .docx |
+| 纯文本 | `.txt` | 直接文本提取 |
 
-### 🔧 处理功能
+### 🔧 处理流水线
 
-- **DOC/DOCX 解析** - 提取段落、标题、表格、图片、超链接和样式
-- **PDF 解析** - 提取文本块、表格、图片，支持页面级内容和布局分析
-- **元数据提取** - 标题、作者、创建日期、修改日期、页数
-- **内容摘要** - AI 驱动的文档摘要和关键信息提取
-- **表格提取** - 检测并提取表格，保留行列结构
-- **标题层级** - 检测并重建文档标题层级结构
+```mermaid
+graph LR
+    A[workspace/input/] --> B[doc-convertor]
+    B --> C[workspace/converted/]
+    C --> D[内容提取]
+    D --> E[workspace/summary/]
+    E --> F[AI 总结]
+    F --> G[manifest.json]
+    G --> H[下游 Agent]
+```
 
-### 📊 分析功能
+### 📊 输出结构
 
-- **文档结构分析** - 识别文档章节、段落和逻辑流程
-- **关键信息提取** - 提取重要实体、日期、数字和引用
-- **内容质量评估** - 评估文档完整性和结构质量
+```
+workspace/summary/
+├── manifest.json              # 处理清单（供调度器）
+├── <文件名>/
+│   ├── text/
+│   │   ├── content.json       # 结构化文档内容
+│   │   ├── summary.json       # 结构化总结（供 Agent）
+│   │   └── summary.md         # 可读总结（供人类）
+│   └── img/
+│       ├── image_1.png
+│       ├── text/              # OCR 结果（可选）
+│       └── img-summary/       # AI 视觉总结（可选）
+└── 综合总结.json               # 综合总结（多文档）
+```
 
 ---
 
@@ -71,64 +88,75 @@
 ### 1. 安装
 
 ```bash
-# 克隆仓库
-git clone https://github.com/yourusername/doc-content-analysis.git
 cd doc-content-analysis
-
-# 安装依赖
 pip install -r requirements.txt
 ```
 
-### 2. 运行
+### 2. 放置文档
 
 ```bash
-# 打开 AI IDE 或 Agent 软件（如 Trae、Cursor、Windsurf）
-# 加载 AGENT.md 作为智能体配置
-# 然后输入您的需求：
-"读取并总结这个 DOCX 文件"
-"提取这个 PDF 中的所有表格"
-"分析这份报告的文档结构"
+# 将文档复制到 workspace/input/
+cp /path/to/documents/*.docx workspace/input/
 ```
 
-### 3. 完成！
+### 3. 运行
 
-分析结果将在 `workspace/output/` 中
-
----
-
-## 演示
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│  📂 输入：research_paper.docx / report.pdf                 │
-├─────────────────────────────────────────────────────────────┤
-│  ↓ doc-content-analysis 处理中...                           │
-│    ✓ 检测文件格式                                            │
-│    ✓ 解析文档结构                                            │
-│    ✓ 提取文本内容                                            │
-│    ✓ 提取表格和图片                                          │
-│    ✓ 构建内容大纲                                            │
-│    ✓ 生成分析报告                                            │
-├─────────────────────────────────────────────────────────────┤
-│  📊 输出：content_analysis.json / summary.md                │
-└─────────────────────────────────────────────────────────────┘
+```bash
+# 在 AI IDE（Trae、Cursor、Windsurf）中加载 AGENT.md
+# Agent 将自动：
+# 1. 转换 .doc/.pdf 为 .docx
+# 2. 提取内容和图片
+# 3. 生成结构化总结
+# 4. 输出 manifest.json 供下游消费
 ```
 
 ---
 
-## 架构设计
+## 多 Agent 集成
 
-```mermaid
-graph LR
-    A[输入文档<br/>DOC/PDF] --> B[格式检测]
-    B --> C{文件类型?}
-    C -->|DOC/DOCX| D[DOCX 解析器]
-    C -->|PDF| E[PDF 解析器]
-    D --> F[内容提取器]
-    E --> F
-    F --> G[结构分析器]
-    G --> H[内容摘要器]
-    H --> I[结构化输出<br/>JSON/MD]
+本 Agent 设计为多 Agent 项目的组成部分：
+
+### 输入契约
+
+```
+workspace/input/
+├── *.doc        # 旧版 Word 文档
+├── *.docx       # Word 文档
+├── *.pdf        # PDF 文档
+└── *.txt        # 纯文本文件
+```
+
+### 输出契约
+
+**manifest.json** — 调度器读取此文件获取处理结果：
+
+```json
+{
+  "status": "completed",
+  "total_files": 3,
+  "success_count": 2,
+  "failed_count": 1,
+  "documents": [
+    {
+      "source_file": "report.docx",
+      "status": "success",
+      "summary_json": "workspace/summary/report/text/summary.json",
+      "summary_md": "workspace/summary/report/text/summary.md"
+    }
+  ]
+}
+```
+
+**summary.json** — 结构化总结供下游 Agent 消费：
+
+```json
+{
+  "title": "文档标题",
+  "summary": "一段话概述...",
+  "sections": [{"heading": "...", "key_points": ["..."]}],
+  "key_info": {"data": ["..."], "conclusions": ["..."]},
+  "keywords": ["关键词1", "关键词2"]
+}
 ```
 
 ---
@@ -137,49 +165,40 @@ graph LR
 
 ```
 doc-content-analysis/
-├── AGENT.md                 # 智能体配置
-├── SKILLS/                  # 模块化处理技能
-│   ├── docx-parser/         # DOCX 文档解析
-│   ├── pdf-parser/          # PDF 文档解析
-│   ├── content-extractor/   # 统一内容提取
-│   ├── structure-analyzer/  # 文档结构分析
-│   └── content-summarizer/  # AI 智能摘要
-├── workspace/               # 您的文档
-│   ├── input/               # 放入文件
-│   └── output/              # 获取结果
-└── requirements.txt         # 依赖项
+├── AGENT.md                     # Agent 配置
+├── SKILLS/
+│   ├── doc-convertor/           # 文档转换与提取
+│   │   ├── SKILL.MD
+│   │   └── scripts/doc_converter.py
+│   └── img-reader/              # 图片 OCR 与视觉分析
+│       ├── SKILL.MD
+│       └── scripts/img_reader.py
+├── workspace/                   # 运行时工作区
+│   ├── input/                   # 用户文档（只读）
+│   ├── converted/               # 转换后的 .docx
+│   └── summary/                 # 输出总结
+└── requirements.txt             # 依赖项
 ```
 
 ---
 
 ## 文档
 
-- [智能体配置](AGENT.md) - 详细的处理规则和工作流程
-- [技能参考](SKILLS/) - 技能模块文档
-
----
-
-## 贡献
-
-欢迎贡献！请随时提交 Pull Request。
-
-1. Fork 仓库
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add amazing feature'`)
-4. 推送到分支 (`git push origin feature/amazing-feature`)
-5. 提交 Pull Request
+- [Agent 配置](AGENT.md) - 工作流和集成契约
+- [doc-convertor 技能](SKILLS/doc-convertor/SKILL.MD) - 转换和提取
+- [img-reader 技能](SKILLS/img-reader/SKILL.MD) - 图片 OCR 和分析
 
 ---
 
 ## 许可证
 
-本项目采用 GPL-3.0 许可证 - 详见 [LICENSE](LICENSE) 文件。
+本项目采用 GPL-3.0 许可证。
 
 ---
 
 <div align="center">
 
-**为文档智能而用心打造 ❤️**
+**DocMind Studio 多 Agent 系统的组成部分**
 
 [⬆ 回到顶部](#-doc-content-analysis)
 
