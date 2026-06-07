@@ -1,0 +1,115 @@
+{
+  "name": "docmind-studio",
+  "displayName": "DocMind Studio",
+  "description": "多 Agent 文档智能处理与知识库管理面板",
+  "version": "0.1.0",
+  "publisher": "docmind",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "docmind",
+          "title": "DocMind Studio",
+          "icon": "media/docmind.svg"
+        }
+      ]
+    },
+    "views": {
+      "docmind": [
+        {
+          "id": "docmind.agents",
+          "name": "Agents"
+        },
+        {
+          "id": "docmind.workflows",
+          "name": "Workflows"
+        },
+        {
+          "id": "docmind.knowledgeBase",
+          "name": "Knowledge Base"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "docmind.openDashboard",
+        "title": "DocMind: Open Dashboard",
+        "icon": "$(dashboard)"
+      },
+      {
+        "command": "docmind.refreshAgents",
+        "title": "Refresh Agents",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "docmind.refreshWorkflows",
+        "title": "Refresh Workflows",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "docmind.refreshKnowledgeBase",
+        "title": "Refresh Knowledge Base",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "docmind.runWorkflow",
+        "title": "DocMind: Run Workflow",
+        "icon": "$(play)"
+      },
+      {
+        "command": "docmind.openKnowledgeBase",
+        "title": "DocMind: Open Knowledge Base",
+        "icon": "$(book)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "docmind.refreshAgents",
+          "when": "view == docmind.agents",
+          "group": "navigation"
+        },
+        {
+          "command": "docmind.refreshWorkflows",
+          "when": "view == docmind.workflows",
+          "group": "navigation"
+        },
+        {
+          "command": "docmind.refreshKnowledgeBase",
+          "when": "view == docmind.knowledgeBase",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "docmind.runWorkflow",
+          "when": "view == docmind.workflows",
+          "group": "inline"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.3.0",
+    "esbuild": "^0.19.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.50.0"
+  }
+}
