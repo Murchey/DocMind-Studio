@@ -4,6 +4,7 @@ import * as fs from 'fs';
 
 interface WorkflowInfo {
   name: string;
+  description: string;
   path: string;
 }
 
@@ -41,9 +42,13 @@ export class WorkflowsProvider implements vscode.TreeDataProvider<WorkflowItem> 
       const files = fs.readdirSync(dir);
       for (const file of files) {
         if (file.endsWith('Workflow.md')) {
+          const fullPath = path.join(dir, file);
+          const content = fs.readFileSync(fullPath, 'utf-8');
+          const heading = content.split(/\r?\n/).find(line => line.startsWith('# '));
           workflows.push({
             name: file.replace('.md', ''),
-            path: path.join(dir, file)
+            description: heading?.replace(/^#\s*/, '').trim() || 'Workflow',
+            path: fullPath
           });
         }
       }
@@ -57,13 +62,14 @@ export class WorkflowsProvider implements vscode.TreeDataProvider<WorkflowItem> 
 class WorkflowItem extends vscode.TreeItem {
   constructor(public readonly workflow: WorkflowInfo) {
     super(workflow.name, vscode.TreeItemCollapsibleState.None);
-    this.tooltip = `Run ${workflow.name}`;
+    this.tooltip = workflow.description;
+    this.description = workflow.description;
     this.iconPath = new vscode.ThemeIcon('play');
     this.command = {
       command: 'vscode.open',
       title: 'Open Workflow',
       arguments: [vscode.Uri.file(workflow.path)]
     };
-    this.contextValue = 'workflow';
+    this.contextValue = 'workflow docmindOpenable docmindRevealable';
   }
 }

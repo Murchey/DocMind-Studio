@@ -32,7 +32,7 @@
         },
         {
           "id": "docmind.knowledgeBase",
-          "name": "Knowledge Base"
+          "name": "Results"
         }
       ]
     },
@@ -66,8 +66,28 @@
         "command": "docmind.openKnowledgeBase",
         "title": "DocMind: Open Knowledge Base",
         "icon": "$(book)"
+      },
+      {
+        "command": "docmind.openPath",
+        "title": "Open",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "docmind.revealPath",
+        "title": "Reveal in Explorer",
+        "icon": "$(folder-opened)"
       }
     ],
+    "configuration": {
+      "title": "DocMind Studio",
+      "properties": {
+        "docmind.progressFile": {
+          "type": "string",
+          "default": "WORKSPACE/.docmind-progress.json",
+          "description": "Relative path to the JSON file used by DocMind agents to report live workflow progress."
+        }
+      }
+    },
     "menus": {
       "view/title": [
         {
@@ -91,6 +111,16 @@
           "command": "docmind.runWorkflow",
           "when": "view == docmind.workflows",
           "group": "inline"
+        },
+        {
+          "command": "docmind.openPath",
+          "when": "viewItem =~ /docmindOpenable/",
+          "group": "inline"
+        },
+        {
+          "command": "docmind.revealPath",
+          "when": "viewItem =~ /docmindRevealable/",
+          "group": "navigation"
         }
       ]
     }

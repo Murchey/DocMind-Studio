@@ -46,9 +46,10 @@ export class AgentsProvider implements vscode.TreeDataProvider<AgentItem> {
           if (fs.existsSync(agentMd)) {
             const content = fs.readFileSync(agentMd, 'utf-8');
             const descMatch = content.match(/description:\s*(.+)/);
+            const heading = content.split(/\r?\n/).find(line => line.startsWith('# '));
             agents.push({
               name: entry.name,
-              description: descMatch?.[1]?.trim() || 'No description',
+              description: descMatch?.[1]?.trim() || heading?.replace(/^#\s*/, '').trim() || 'Agent',
               path: agentMd
             });
           }
@@ -72,5 +73,6 @@ class AgentItem extends vscode.TreeItem {
       title: 'Open AGENT.md',
       arguments: [vscode.Uri.file(agent.path)]
     };
+    this.contextValue = 'agent docmindOpenable docmindRevealable';
   }
 }
