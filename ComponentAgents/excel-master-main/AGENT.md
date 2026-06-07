@@ -46,6 +46,7 @@
 | `excel_compat` | Excel compatibility skill, convert legacy .xls files to .xlsx | When encountering .xls format files |
 | `excel_chart` | Data chart generation skill, generate visual charts based on data profiling results | When user needs visual display |
 | `excel_preview` | Visual preview operation skill, provide web interface | When needing user to confirm requirements or view results |
+| `excel_analysis` | Enhanced data analysis skill, support business-specific and region-specific data comparison analysis | When user needs business direction analysis, reference document support, or AI data summarization |
 
 ---
 
@@ -279,7 +280,90 @@ Agent divides user requirements into two types: **Customized Requirements** and 
 
 ---
 
-### 3. Notes
+### 3. Enhanced Analysis Requirements (Business-Specific Data Analysis with Reference Documents)
+
+**Applicable Scenario**: Deep data analysis with business direction, reference document support, and AI summarization
+
+**Steps**:
+
+1. **Get User Input**
+
+   * Analyze user intent and business analysis requirements
+   * **Important**: Determine analysis direction (company/academic) and specific area (finance/sales/grades/research)
+   * Ask if user has reference documents (MD format) to attach
+
+2. **Create Workspace**
+
+   * **Read `mkdir_workspace` Skill**: Understand workspace creation script usage
+   * Call `mkdir_workspace` Skill
+
+3. **Read Tables and Reference Documents**
+
+   * **Read `excel_io` Skill**: Understand Excel file reading method
+   * Call `excel_io.read()` to read Excel files from temp directory
+   * Load any attached MD reference documents
+
+4. **Data Profiling**
+
+   * **Read `data_profile` Skill**: Understand data profiling script usage and output format
+   * Call `data_profile` Skill to extract table data characteristics
+   * Get column types, null value counts, unique value counts, and sample data
+   * Adjust analysis logic based on profiling results
+
+5. **Open WEB Page to Confirm Analysis Requirements (Required)**
+
+   * **Read `excel_preview` Skill**: Understand preview service startup method and operation modes
+   * Call `excel_preview` Skill to start Web service, **must use `confirm` operation mode**
+   * **Purpose**: Let users visually confirm analysis requirements on web interface
+   * Users complete the following operations on web interface:
+     - View data preview and structure information
+     - Select analysis direction (company/academic) and area (finance/sales/grades/research)
+     - Upload or select reference documents (MD format)
+     - Specify analysis goals and output format
+   * After Agent gets user-confirmed requirements, continue to next steps
+   * **This step is executed before analysis** to ensure analysis meets user requirements
+
+6. **Execute Enhanced Analysis**
+
+   * **Read `excel_analysis` Skill**: Understand analysis script usage and parameters
+   * Call `excel_analysis` Skill to perform business-specific data analysis
+   * **Parameters**:
+     - `--direction`: Analysis direction (company/academic/general)
+     - `--area`: Analysis area (finance/sales/hr/grades/teaching/research)
+     - `--reference`: Path to reference MD documents
+     - `--output`: JSON output path
+   * Generate comprehensive analysis results with insights and recommendations
+
+7. **Save Analysis Results**
+
+   * Analysis results automatically saved to JSON file in workspace
+   * **Read `excel_io` Skill**: Understand Excel file saving method if needed
+   * Results saved to `./excel_output/analysis_result.json`
+
+8. **Output Analysis Summary (Required)**
+
+   * **Read `excel_preview` Skill**: Understand result preview service startup method
+   * Call `excel_preview` Skill to start result preview service
+   * Display analysis summary to user including:
+     - Key metrics and statistics
+     - Business insights and trends
+     - Recommendations based on analysis
+     - Reference document integration summary
+
+9. **Generate Data Charts (if needed)**
+
+   * If user needs visual display:
+     * **Read `excel_chart` Skill**: Understand chart generation script usage
+     * **Must ask user**:
+       - What type of chart to generate (bar, line, pie, scatter)
+       - What data range to display (which columns, which rows, filter conditions)
+     * Generate chart based on user selection
+     * Save chart to workspace `excel_output` directory
+     * Show chart to user and ask for feedback
+
+---
+
+### 4. Notes
 
 * All file operations are performed **within the workspace** to avoid accidental operations
 * Intermediate CSV files are only for temporary use, not overwriting original Excel files
@@ -306,5 +390,8 @@ mkdir_workspace → excel_io.read → data_profile → excel_preview(confirm) �
 
 General Requirements Workflow:
 mkdir_workspace → [same_name_convertor] → excel_io.read → data_profile → excel_preview(compare) → excel_compare → execute script → excel_io.write → [excel_preview(result)] → [excel_chart]
+
+Enhanced Analysis Workflow:
+mkdir_workspace → excel_io.read → data_profile → excel_preview(confirm) → excel_analysis → [excel_preview(result)] → [excel_chart]
 
 [] indicates optional call
