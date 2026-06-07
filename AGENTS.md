@@ -99,7 +99,26 @@ root = Path(__file__).parent  # DocMind-Studio 根目录
 project_ws = root / "WORKSPACE" / project_name
 project_ws.mkdir(parents=True, exist_ok=True)
 
-# 3. 为每个 AGENT 创建子工作区
+# 3. 初始化进度追踪（必须）
+import sys
+sys.path.insert(0, str(root / 'ComponentAgents' / 'process-skill' / 'scripts'))
+from progress_tracker import ProgressTracker
+tracker = ProgressTracker()  # 默认写入 WORKSPACE/.docmind-progress.json
+task_id = tracker.create_task(
+    project=project_name,
+    workflow="KnowledgeBuilderWorkflow",  # 或其他工作流名称
+    agent="doc-content-analysis",
+    steps=[
+        {"id": "workspace-init", "name": "创建项目工作区", "agent": "AGENTS.md"},
+        {"id": "content-extraction", "name": "文档内容提取", "agent": "doc-content-analysis"},
+        {"id": "knowledge-build", "name": "知识库构建", "agent": "knowledge-builder"},
+    ]
+)
+
+# 4. 更新进度 - 工作区创建完成
+tracker.update_progress(task_id=task_id, step_id="workspace-init", progress=100, message="工作区创建完成")
+
+# 5. 为每个 AGENT 创建子工作区
 agent_ws = project_ws / "doc-form-master"
 (agent_ws / "input").mkdir(parents=True, exist_ok=True)
 (agent_ws / "output").mkdir(parents=True, exist_ok=True)
@@ -162,7 +181,26 @@ shutil.copy("用户文档路径", agent_ws / "input" / "input.docx")
 1. 用户描述需求
 2. AGENTS.md 根据需求匹配 Workflow
 3. **创建项目工作区** `WORKSPACE/{ProjectName}/` 及 Agent 子目录
-4. 复制用户文档到 Agent 的 `input/`
-5. 调用 AGENT，传入工作区路径
-6. AGENT 加载 SKILL 执行具体任务
-7. 输出结果写入工作区，返回给用户或传递给下游 AGENT
+4. **初始化进度追踪**（使用 ProgressTracker）
+5. 复制用户文档到 Agent 的 `input/`
+6. 调用 AGENT，传入工作区路径
+7. AGENT 加载 SKILL 执行具体任务
+8. **每个步骤完成后更新进度**（tracker.update_progress / tracker.complete_step）
+9. 输出结果写入工作区，返回给用户或传递给下游 AGENT
+10. **任务完成时标记完成**（tracker.complete_task）
+
+### 进度更新示例
+
+```python
+# 步骤开始
+tracker.update_progress(task_id=task_id, step_id="content-extraction", progress=0, message="开始文档内容提取")
+
+# 步骤进行中
+tracker.update_progress(task_id=task_id, step_id="content-extraction", progress=50, message="正在处理文档1...")
+
+# 步骤完成
+tracker.complete_step(task_id=task_id, step_id="content-extraction", message="文档内容提取完成")
+
+# 任务完成
+tracker.complete_task(task_id=task_id, message="所有任务完成")
+```

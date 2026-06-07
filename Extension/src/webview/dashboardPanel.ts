@@ -22,6 +22,8 @@ interface ProjectSummary {
   path: string;
   agentCount: number;
   artifactCount: number;
+  size: number;
+  sizeFormatted: string;
   updatedAt: string;
   knowledgeBase?: KnowledgeBaseSummary;
   agents: AgentWorkspaceSummary[];
@@ -1242,6 +1244,9 @@ export class DashboardPanel {
                 ${project.agentCount} ${this.t('agentsCount')} · ${project.artifactCount} ${this.t('artifactsCount')}
                 ${project.knowledgeBase ? ` · ${project.knowledgeBase.docCount} ${this.t('docsCount')}` : ''}
               </div>
+              <div class="grid-item-meta">
+                <span class="tag">📦 ${project.sizeFormatted}</span>
+              </div>
             </div>
             <div class="grid-item-footer">
               <span class="tag">${project.updatedAt}</span>
@@ -1601,11 +1606,14 @@ export class DashboardPanel {
       .map(projectName => {
         const projectPath = path.join(workspacePath, projectName);
         const agents = this.scanAgentWorkspaces(projectPath);
+        const size = this.getDirSize(projectPath);
         return {
           name: projectName,
           path: projectPath,
           agentCount: agents.length,
           artifactCount: agents.reduce((sum, agent) => sum + agent.folders.reduce((folderSum, folder) => folderSum + folder.count, 0), 0),
+          size,
+          sizeFormatted: this.formatSize(size),
           updatedAt: this.formatUpdated(projectPath),
           knowledgeBase: this.scanKnowledgeBase(projectPath),
           agents
@@ -1698,6 +1706,36 @@ export class DashboardPanel {
       }
     }
     return count;
+  }
+
+  private getDirSize(dirPath: string): number {
+    if (!fs.existsSync(dirPath)) {
+      return 0;
+    }
+    let size = 0;
+    for (const entry of this.readDirEntries(dirPath)) {
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isFile()) {
+        try {
+          size += fs.statSync(fullPath).size;
+        } catch {
+          // Ignore stat errors
+        }
+      } else if (entry.isDirectory()) {
+        size += this.getDirSize(fullPath);
+      }
+    }
+    return size;
+  }
+
+  private formatSize(bytes: number): string {
+    if (bytes === 0) {
+      return '0 B';
+    }
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const k = 1024;
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + units[i];
   }
 
   private extractAgents(content: string): string[] {
