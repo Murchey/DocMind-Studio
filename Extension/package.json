@@ -91,6 +91,11 @@
     "menus": {
       "view/title": [
         {
+          "command": "docmind.openDashboard",
+          "when": "view == docmind.agents || view == docmind.workflows || view == docmind.knowledgeBase",
+          "group": "navigation"
+        },
+        {
           "command": "docmind.refreshAgents",
           "when": "view == docmind.agents",
           "group": "navigation"

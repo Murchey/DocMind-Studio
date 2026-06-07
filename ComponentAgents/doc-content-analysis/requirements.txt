@@ -1,5 +1,6 @@
 python-docx>=0.8.11
 pdf2docx>=0.5.6
+PyMuPDF>=1.23.0
 Pillow>=9.0
 pywin32>=306; sys_platform == "win32"
 

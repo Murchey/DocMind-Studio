@@ -147,28 +147,102 @@ class DocConverter:
         if output_path is None:
             output_path = str(Path(input_path).with_suffix('.docx'))
         Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+        # 方法1: pdf2docx（适用于结构化PDF）
         try:
             from pdf2docx import Converter
-            print(f"[INFO] Converting PDF to DOCX: {Path(input_path).name}")
+            print(f"[INFO] Converting PDF to DOCX with pdf2docx: {Path(input_path).name}")
             cv = Converter(input_path)
             cv.convert(output_path)
             cv.close()
-            print(f"[INFO] PDF conversion successful")
+            print(f"[INFO] PDF conversion successful with pdf2docx")
             return {
                 'success': True, 'input_path': input_path,
                 'output_path': output_path, 'method': 'pdf2docx',
                 'file_size': os.path.getsize(output_path)
             }
         except ImportError:
+            print(f"[WARN] pdf2docx not installed, trying PyMuPDF...")
+        except Exception as e:
+            print(f"[WARN] pdf2docx failed: {e}, trying PyMuPDF...")
+
+        # 方法2: PyMuPDF直接提取文字（适用于知网等中文PDF）
+        pdf_content = self.extract_pdf_content(input_path)
+        if pdf_content.get('success'):
+            # 将提取的内容保存为文本文件
+            txt_output = str(Path(output_path).with_suffix('.txt'))
+            try:
+                with open(txt_output, 'w', encoding='utf-8') as f:
+                    f.write(pdf_content['full_text'])
+                return {
+                    'success': True, 'input_path': input_path,
+                    'output_path': txt_output, 'method': 'pymupdf_text',
+                    'file_size': os.path.getsize(txt_output)
+                }
+            except Exception as e:
+                return {
+                    'success': False, 'input_path': input_path,
+                    'method': 'pymupdf_text', 'error': str(e)
+                }
+
+        return {
+            'success': False, 'input_path': input_path,
+            'error': 'All PDF conversion methods failed. Please install pdf2docx or PyMuPDF (pip install pymupdf).'
+        }
+
+    # ── PDF直接文字提取（PyMuPDF） ─────────────────────────────
+
+    def extract_pdf_content(self, pdf_path: str) -> dict:
+        """使用PyMuPDF直接从PDF提取文字内容，适用于知网等中文PDF。"""
+        if not os.path.exists(pdf_path):
+            return {'success': False, 'error': f'File not found: {pdf_path}'}
+        try:
+            import fitz  # PyMuPDF
+        except ImportError:
+            return {'success': False, 'error': 'PyMuPDF not installed. Run: pip install pymupdf'}
+
+        try:
+            doc = fitz.open(pdf_path)
+            paragraphs = []
+            full_text_parts = []
+
+            for page_num in range(doc.page_count):
+                page = doc[page_num]
+                text = page.get_text()
+                if not text.strip():
+                    continue
+
+                # 按行分割并过滤空行
+                lines = [line.strip() for line in text.splitlines() if line.strip()]
+                for line in lines:
+                    paragraphs.append({
+                        'text': line,
+                        'style': 'Normal',
+                        'is_heading': False,
+                        'level': 0
+                    })
+                    full_text_parts.append(line)
+
+            doc.close()
+
+            if not full_text_parts:
+                return {'success': False, 'error': 'No text content extracted from PDF'}
+
             return {
-                'success': False, 'input_path': input_path,
-                'error': 'pdf2docx not installed. Run: pip install pdf2docx'
+                'success': True,
+                'file_name': Path(pdf_path).name,
+                'file_path': str(pdf_path),
+                'title': Path(pdf_path).stem,
+                'author': '',
+                'created_at': '',
+                'paragraph_count': len(paragraphs),
+                'table_count': 0,
+                'paragraphs': paragraphs,
+                'tables': [],
+                'full_text': '\n'.join(full_text_parts)
             }
         except Exception as e:
-            return {
-                'success': False, 'input_path': input_path,
-                'method': 'pdf2docx', 'error': str(e)
-            }
+            return {'success': False, 'error': f'Failed to extract PDF content: {str(e)}'}
 
     # ── 统一转换入口 ──────────────────────────────────────────
 
@@ -399,7 +473,13 @@ class DocConverter:
         txt_files = sorted(Path(input_dir).glob('*.txt'))
         txt_files = [f for f in txt_files if not f.name.startswith('~')]
 
+        # 处理 PDF 文件（使用PyMuPDF直接提取）
+        pdf_files = sorted(Path(input_dir).glob('*.pdf'))
+        pdf_files = [f for f in pdf_files if not f.name.startswith('~')]
+
         summaries = []
+
+        # 处理已转换的DOCX文件
         for docx_file in docx_files:
             stem = docx_file.stem
             doc_summary_dir = Path(summary_dir) / stem
@@ -426,6 +506,7 @@ class DocConverter:
                 'image_count': img_result.get('image_count', 0),
             })
 
+        # 处理TXT文件
         for txt_file in txt_files:
             stem = txt_file.stem
             doc_summary_dir = Path(summary_dir) / stem
@@ -441,6 +522,35 @@ class DocConverter:
             summaries.append({
                 'file_name': stem,
                 'source_file': txt_file.name,
+                'docx_path': None,
+                'text_dir': str(text_dir),
+                'img_dir': None,
+                'content_success': content.get('success', False),
+                'image_count': 0,
+            })
+
+        # 处理PDF文件（直接使用PyMuPDF提取，适用于知网等中文PDF）
+        for pdf_file in pdf_files:
+            stem = pdf_file.stem
+            # 跳过已通过PDF转DOCX成功处理的文件
+            already_processed = any(s['file_name'] == stem for s in summaries)
+            if already_processed:
+                continue
+
+            doc_summary_dir = Path(summary_dir) / stem
+            text_dir = doc_summary_dir / 'text'
+            text_dir.mkdir(parents=True, exist_ok=True)
+
+            print(f"[INFO] Extracting PDF content directly with PyMuPDF: {pdf_file.name}")
+            content = self.extract_pdf_content(str(pdf_file))
+            if content.get('success'):
+                content_path = text_dir / 'content.json'
+                with open(content_path, 'w', encoding='utf-8') as f:
+                    json.dump(content, f, indent=2, ensure_ascii=False)
+
+            summaries.append({
+                'file_name': stem,
+                'source_file': pdf_file.name,
                 'docx_path': None,
                 'text_dir': str(text_dir),
                 'img_dir': None,
