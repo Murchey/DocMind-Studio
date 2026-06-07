@@ -23,9 +23,12 @@ python SKILLS/preview-design/scripts/preview_server.py workspace/parsed/document
 
 **服务器会**：
 1. 启动本地 HTTP 服务（端口 8765-8780）
-2. 自动打开浏览器显示预览页面
-3. 等待用户在浏览器中编辑配置并点击"确认并继续"
-4. 将用户确认的配置保存到 `workspace/validated/edited_config.json`
+2. 等待服务器就绪（端口探测）
+3. 自动打开浏览器显示预览页面
+4. 等待用户在浏览器中编辑配置并点击"确认并继续"
+5. 将用户确认的配置保存到 `workspace/validated/edited_config.json`
+
+**IDE 环境**：如果 IDE（如 Trae）会自动检测 localhost URL 并打开预览面板，可传入 `open_browser=False` 避免双窗口。
 
 ## Python API
 
@@ -37,7 +40,8 @@ from preview_server import run_preview
 result = run_preview(
     'workspace/parsed/document_ast.json',
     'workspace/validated/template_config.json',
-    'workspace/input/input.docx'
+    'workspace/input/input.docx',
+    open_browser=True  # IDE 环境设为 False，避免双窗口
 )
 # result 包含: user_confirmed, cover_preserved, toc_preserved, edited_config
 # edited_config.json 会自动保存到 workspace/validated/

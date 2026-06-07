@@ -1,6 +1,7 @@
 import os
 import json
 import yaml
+import socket
 import webbrowser
 import threading
 from pathlib import Path
@@ -1413,12 +1414,36 @@ def get_schema():
     return jsonify(manager.get_config_schema())
 
 
+def wait_for_server(host, port, timeout=10):
+    """等待服务器就绪，通过端口探测确认"""
+    import time
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.connect((host, port))
+                return True
+            except OSError:
+                time.sleep(0.2)
+    return False
+
+
 def run_server(host='127.0.0.1', port=5001, open_browser=True):
-    if open_browser:
-        threading.Timer(1.5, lambda: webbrowser.open(f'http://{host}:{port}')).start()
-    
-    print(f"[INFO] Format Manager Web UI starting at http://{host}:{port}")
-    app.run(host=host, port=port, debug=False)
+    url = f'http://{host}:{port}'
+    print(f"[INFO] Format Manager Web UI starting at: {url}")
+
+    server_thread = threading.Thread(target=lambda: app.run(host=host, port=port, debug=False), daemon=True)
+    server_thread.start()
+
+    if wait_for_server(host, port):
+        print(f"[INFO] Server ready: {url}")
+        if open_browser:
+            webbrowser.open(url)
+        print(f"[PREVIEW_URL] {url}")
+    else:
+        print(f"[WARN] Server may not be ready, try opening manually: {url}")
+
+    server_thread.join()
 
 
 if __name__ == '__main__':

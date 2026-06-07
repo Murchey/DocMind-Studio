@@ -724,11 +724,15 @@ class ASTToDocxConverter:
         if len(sections) < 1:
             return
 
+        # When there's only 1 section (cover/TOC/body share it), always apply header/footer
+        multi_section = len(sections) > 1
+
         for i, section in enumerate(sections):
             section.header.is_linked_to_previous = False
             section.footer.is_linked_to_previous = False
 
-            if i < pre_body_count:
+            is_pre_body = multi_section and (i < pre_body_count)
+            if is_pre_body:
                 if header_cfg.get("enabled", False):
                     header = section.header
                     if header.paragraphs:

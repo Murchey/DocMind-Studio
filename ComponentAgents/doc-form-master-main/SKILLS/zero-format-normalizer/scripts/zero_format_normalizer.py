@@ -809,29 +809,28 @@ class ZeroFormatNormalizer:
     def _add_header_footer(self):
         header_cfg = self.template_config.get("header", {})
         footer_cfg = self.template_config.get("footer", {})
-        
-        # 检查是否有封面和目录
-        has_cover = self._detect_cover_section()
-        has_toc = self.template_config.get("toc", {}).get("enabled", False)
-        
-        # 计算正文开始的 section 索引
-        body_section_start = 0
-        if has_cover:
-            body_section_start += 1
-        if has_toc:
-            body_section_start += 1
 
         sections = self.doc.sections
         if len(sections) < 1:
             return
 
+        # When there's only 1 section (cover/TOC/body share it), always apply header/footer
+        # When there are multiple sections, skip cover/TOC sections
+        has_cover = self._detect_cover_section()
+        has_toc = self.template_config.get("toc", {}).get("enabled", False)
+        body_section_start = 0
+        if has_cover:
+            body_section_start += 1
+        if has_toc:
+            body_section_start += 1
+        multi_section = len(sections) > 1
+
         for i, section in enumerate(sections):
             section.header.is_linked_to_previous = False
             section.footer.is_linked_to_previous = False
 
-            # 判断是否是正文 section
-            is_body_section = (i >= body_section_start)
-            
+            is_body_section = (not multi_section) or (i >= body_section_start)
+
             if not is_body_section:
                 # 封面和目录 section：设置空的页眉和页脚
                 if header_cfg.get("enabled", False):

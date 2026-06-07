@@ -35,7 +35,7 @@ tools: [python]
 ```
 doc-compatibility → markdown-converter → docx-parser → xml-safety → formula-protection → template-engine → font-manager
 → format-normalizer（已格式化）/ zero-format-normalizer（零格式）
-→ table-processor → footnote-processor → margin-manager → preview-design → image-layout → translation-engine → pdf-export
+→ table-processor → footnote-processor → margin-manager → preview-design（含文档标注）→ image-layout → translation-engine → pdf-export
 → custom-format-manager（自定义格式配置管理，独立调用）
 ```
 
@@ -163,8 +163,8 @@ result = run_preview(
     'workspace/validated/template_config.json',
     'workspace/input/input.docx'
 )
-# 服务器会自动打开浏览器，等待用户在浏览器中点击"确认并继续"
-# 返回结果包含用户编辑后的配置
+# 服务器启动后自动打开浏览器，用户在浏览器中确认设计并添加标注
+# 返回结果包含用户编辑后的配置和标注笔记
 ```
 
 预览服务器展示内容：
@@ -176,6 +176,35 @@ result = run_preview(
 **将用户确认的配置保存到 `workspace/validated/edited_config.json`**
 
 **禁止**：跳过 Web 预览，仅用文字摘要代替
+
+## Step 8b: 文档标注（可选，集成在预览界面中）
+
+标注功能已集成在 Step 8 的 preview-design 预览界面中，无需启动额外服务器。
+
+**用户在预览界面中**：
+1. 右下角浮动按钮"标注笔记"打开标注面板
+2. 点击预览中任意元素（封面项、目录项、正文段落、标题），弹出标注输入框
+3. 输入修改建议后添加标注
+4. 标注面板中可查看、删除所有标注
+5. 点击"保存笔记"保存到文件，或"确认标注"提交
+
+**标注输出** `workspace/validated/notes.json`：
+
+```json
+{
+  "notes": [
+    {
+      "section": "body",
+      "idx": 5,
+      "source_text": "原始文本片段...",
+      "note": "用户输入的修改建议",
+      "created_at": "2026-06-07T12:00:00"
+    }
+  ]
+}
+```
+
+**后续处理**：AGENT 读取 `notes.json`，根据用户建议调整格式化参数或文档内容。
 
 ## Step 9a/9b: 格式化
 读取 `workspace/validated/edited_config.json` 中的用户确认配置（如有），与 `template_config.json` 合并后：
@@ -304,7 +333,7 @@ import sys
 sys.path.insert(0, 'SKILLS/custom-format-manager/scripts')
 from web_server import run_server
 
-run_server(host='127.0.0.1', port=5001)
+run_server(host='127.0.0.1', port=5001, open_browser=False)
 ```
 
 WEB 界面功能：

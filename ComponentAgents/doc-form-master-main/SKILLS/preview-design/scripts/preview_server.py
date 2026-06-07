@@ -68,6 +68,9 @@ class PreviewState:
         self.edited_config = None
         self.cover_preserved = True
         self.toc_preserved = True
+        # Note annotation state
+        self.notes = []
+        self.page_comments = []
 
     @staticmethod
     def _load_json(path):
@@ -168,12 +171,12 @@ def build_preview_html(state):
     if state.has_cover():
         cover_paras = state.get_cover_paras()
         cover_items = ""
-        for p in cover_paras:
+        for i, p in enumerate(cover_paras):
             text = p.get("text", "").strip()
             if text:
-                cover_items += f'<div class="cover-item">{text}</div>'
+                cover_items += f'<div class="cover-item annotatable" data-section="cover" data-idx="{i}" onclick="onAnnotatableClick(this)"><span class="note-badge"></span>{text}</div>'
             else:
-                cover_items += '<div class="cover-item empty">&nbsp;</div>'
+                cover_items += f'<div class="cover-item empty annotatable" data-section="cover" data-idx="{i}" onclick="onAnnotatableClick(this)"><span class="note-badge"></span>&nbsp;</div>'
         cover_section = f'''
         <div class="section-block" id="cover-section">
             <h2 class="section-title">封面页 <span class="badge">已检测到</span></h2>
@@ -199,10 +202,10 @@ def build_preview_html(state):
     if state.has_toc():
         toc_paras = state.get_toc_paras()
         toc_items = ""
-        for p in toc_paras:
+        for i, p in enumerate(toc_paras):
             text = p.get("text", "").strip()
             if text:
-                toc_items += f'<div class="toc-item">{text}</div>'
+                toc_items += f'<div class="toc-item annotatable" data-section="toc" data-idx="{i}" onclick="onAnnotatableClick(this)"><span class="note-badge"></span>{text}</div>'
         toc_existing_section = f'''
         <div class="section-block">
             <h2 class="section-title">已有目录页 <span class="badge">已检测到</span></h2>
@@ -240,21 +243,70 @@ def build_preview_html(state):
     else:
         footer_preview = '<div style="color:#999;font-size:12px;text-align:center;">页脚未启用</div>'
 
+    # Pagination: estimate lines per page (1pt ≈ 1.333px, A4=210x297mm)
+    margin_top_mm = page_cfg.get("margin_top", 2.54) * 10
+    margin_bottom_mm = page_cfg.get("margin_bottom", 2.54) * 10
+    margin_left_mm = page_cfg.get("margin_left", 3.18) * 10
+    margin_right_mm = page_cfg.get("margin_right", 2.54) * 10
+    usable_height_px = int((297 - margin_top_mm - margin_bottom_mm) * 3.78)
+    usable_width_px = int((210 - margin_left_mm - margin_right_mm) * 3.78)
+    # Average char width: Chinese char ≈ body_size * 1.333px, estimate 0.6em per char
+    char_width_px = body_size * 1.333 * 0.55
+    chars_per_line = max(int(usable_width_px / char_width_px), 30)
+    para_line_px = body_size * 1.333 * line_spacing + (6 if paragraph_spacing else 4)
+    lines_per_page = max(int(usable_height_px / para_line_px), 15)
+
     body_paras = state.get_body_sample()
     body_items = ""
-    for p in body_paras:
+    pages = [[]]
+    page_heights = [0]
+
+    def _para_html(pi, text, style):
+        if "Heading 1" in style:
+            return f'<div class="body-h1 annotatable" data-section="body" data-idx="{pi}" onclick="onAnnotatableClick(this)"><span class="note-badge"></span>{text}</div>'
+        elif "Heading 2" in style:
+            return f'<div class="body-h2 annotatable" data-section="body" data-idx="{pi}" onclick="onAnnotatableClick(this)"><span class="note-badge"></span>{text}</div>'
+        elif "Heading 3" in style:
+            return f'<div class="body-h3 annotatable" data-section="body" data-idx="{pi}" onclick="onAnnotatableClick(this)"><span class="note-badge"></span>{text}</div>'
+        return f'<div class="body-para annotatable" data-section="body" data-idx="{pi}" onclick="onAnnotatableClick(this)"><span class="note-badge"></span>{text}</div>'
+
+    def _estimate_height(text, style):
+        if "Heading 1" in style:
+            return h1.get("size", 16) * 1.333 + 24  # margin 16+8
+        elif "Heading 2" in style:
+            return h2.get("size", 14) * 1.333 + 18  # margin 12+6
+        elif "Heading 3" in style:
+            return h3.get("size", 13) * 1.333 + 14  # margin 10+4
+        n_lines = max(1, (len(text) + chars_per_line - 1) // chars_per_line)
+        return n_lines * para_line_px + (6 if paragraph_spacing else 4)
+
+    for i, p in enumerate(body_paras):
         text = p.get("text", "").strip()
         style = p.get("style", "") or ""
         if not text:
             continue
-        if "Heading 1" in style:
-            body_items += f'<div class="body-h1" id="preview-h1">{text}</div>'
-        elif "Heading 2" in style:
-            body_items += f'<div class="body-h2" id="preview-h2">{text}</div>'
-        elif "Heading 3" in style:
-            body_items += f'<div class="body-h3" id="preview-h3">{text}</div>'
-        else:
-            body_items += f'<div class="body-para" id="preview-body">{text[:120]}{"..." if len(text) > 120 else ""}</div>'
+        snippet = text[:120] + ("..." if len(text) > 120 else "")
+        body_items += _para_html(i, snippet, style)
+        est_h = _estimate_height(text, style)
+        if page_heights[-1] + est_h > usable_height_px and page_heights[-1] > 0:
+            pages.append([])
+            page_heights.append(0)
+        pages[-1].append(_para_html(i, text, style))
+        page_heights[-1] += est_h
+
+    header_text_display = header_text if header_enabled else ""
+    pn_fmt_func = lambda n: str(n) if footer_pn_fmt == "arabic" else {1:"I",2:"II",3:"III",4:"IV",5:"V"}.get(n, str(n)) if footer_pn_fmt == "roman" else {1:"一",2:"二",3:"三",4:"四",5:"五"}.get(n, str(n)) if footer_pn_fmt == "chinese" else str(n)
+    body_pages_html = ""
+    for pg_idx, pg_paras in enumerate(pages):
+        pn = pg_idx + 1
+        pg_content = "".join(pg_paras)
+        pn_display = pn_fmt_func(pn)
+        body_pages_html += f'''
+        <div class="word-page">
+            <div class="word-page-header">{header_text_display}</div>
+            <div class="word-page-body">{pg_content}</div>
+            <div class="word-page-footer"><span class="word-page-number">{pn_display}</span></div>
+        </div>'''
 
     html = f'''<!DOCTYPE html>
 <html lang="zh-CN">
@@ -315,6 +367,58 @@ body {{ font-family: "{chinese_font}", sans-serif; background: #f0f2f5; color: #
 .btn-secondary {{ background: #f0f0f0; color: #333; }}
 .btn-secondary:hover {{ background: #e0e0e0; }}
 .btn-row {{ display: flex; gap: 10px; margin-top: 16px; position: sticky; bottom: 0; background: white; padding: 12px 0; border-top: 1px solid #eee; }}
+
+/* ===== Word-like Page View ===== */
+.pages-container {{ display: flex; flex-direction: column; align-items: center; gap: 24px; padding: 10px 0; }}
+.word-page {{ width: 100%; background: white; border: 1px solid #d0d0d0; border-radius: 2px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); position: relative; overflow: hidden; }}
+.word-page-header {{ padding: {max(int(page_cfg.get("margin_top", 2.54) * 3.78) - 8, 8)}px {max(int(page_cfg.get("margin_right", 2.54) * 3.78), 16)}px 8px {max(int(page_cfg.get("margin_left", 3.18) * 3.78), 16)}px; border-bottom: {"1px solid #333" if header_sep else "1px solid #e0e0e0"}; font-size: {header_size}pt; font-family: "{header_font}"; text-align: {header_align}; color: {"#333" if header_enabled else "transparent"}; min-height: 18px; }}
+.word-page-footer {{ padding: 8px {max(int(page_cfg.get("margin_right", 2.54) * 3.78), 16)}px {max(int(page_cfg.get("margin_bottom", 2.54) * 3.78) - 8, 8)}px {max(int(page_cfg.get("margin_left", 3.18) * 3.78), 16)}px; border-top: 1px solid #e0e0e0; display: flex; justify-content: space-between; align-items: center; min-height: 20px; }}
+.word-page-number {{ font-size: 9pt; font-family: "{footer_font}"; text-align: {footer_align}; color: #666; }}
+.word-page-body {{ padding: 4px {max(int(page_cfg.get("margin_right", 2.54) * 3.78), 16)}px 4px {max(int(page_cfg.get("margin_left", 3.18) * 3.78), 16)}px; }}
+.view-toggle {{ display: flex; gap: 6px; }}
+.view-toggle button {{ padding: 4px 12px; border: 1px solid #ddd; background: white; color: #666; border-radius: 4px; cursor: pointer; font-size: 12px; transition: all 0.2s; }}
+.view-toggle button.active {{ background: #1a73e8; color: white; border-color: #1a73e8; }}
+.view-toggle button:hover:not(.active) {{ background: #f0f0f0; }}
+
+/* ===== Note Annotation Styles ===== */
+.annotatable {{ position: relative; cursor: pointer; transition: all 0.2s; border-left: 3px solid transparent; padding-left: 8px; }}
+.annotatable:hover {{ background: rgba(26, 115, 232, 0.06); border-left-color: #1a73e8; border-radius: 0 4px 4px 0; }}
+.annotatable.has-note {{ border-left-color: #ff9800; background: rgba(255, 152, 0, 0.06); }}
+.annotatable.has-note:hover {{ border-left-color: #f57c00; background: rgba(255, 152, 0, 0.1); }}
+.note-badge {{ position: absolute; top: -6px; right: -6px; background: #ff9800; color: white; font-size: 10px; width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; box-shadow: 0 1px 3px rgba(0,0,0,0.2); display: none; }}
+.annotatable.has-note .note-badge {{ display: flex; }}
+
+.note-fab {{ position: fixed; bottom: 24px; right: 24px; width: 56px; height: 56px; border-radius: 50%; background: #1a73e8; color: white; border: none; cursor: pointer; font-size: 22px; box-shadow: 0 4px 12px rgba(26,115,232,0.4); transition: all 0.3s; z-index: 900; display: flex; align-items: center; justify-content: center; }}
+.note-fab:hover {{ transform: scale(1.1); box-shadow: 0 6px 16px rgba(26,115,232,0.5); background: #1557b0; }}
+.note-fab .fab-count {{ position: absolute; top: -4px; right: -4px; background: #e53935; color: white; font-size: 11px; width: 20px; height: 20px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; }}
+
+.note-panel {{ position: fixed; top: 0; right: -420px; width: 400px; height: 100vh; background: white; box-shadow: -4px 0 20px rgba(0,0,0,0.15); z-index: 1000; transition: right 0.3s ease; display: flex; flex-direction: column; }}
+.note-panel.open {{ right: 0; }}
+.note-panel-header {{ background: linear-gradient(135deg, #1a73e8, #4285f4); color: white; padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }}
+.note-panel-header h3 {{ font-size: 16px; font-weight: 600; }}
+.note-panel-close {{ background: rgba(255,255,255,0.2); border: none; color: white; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; }}
+.note-panel-close:hover {{ background: rgba(255,255,255,0.3); }}
+.note-panel-body {{ flex: 1; overflow-y: auto; padding: 16px; }}
+.note-panel-footer {{ padding: 12px 16px; border-top: 1px solid #eee; display: flex; gap: 8px; flex-shrink: 0; }}
+.note-empty {{ text-align: center; color: #999; padding: 40px 20px; font-size: 14px; }}
+.note-empty svg {{ width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.3; }}
+.note-card {{ background: #f8f9fa; border-radius: 8px; padding: 12px; margin-bottom: 10px; border-left: 3px solid #ff9800; position: relative; }}
+.note-card-header {{ display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }}
+.note-card-source {{ font-size: 11px; color: #888; background: #e8f0fe; padding: 2px 8px; border-radius: 10px; }}
+.note-card-text {{ font-size: 13px; color: #333; line-height: 1.5; word-break: break-word; }}
+.note-card-delete {{ position: absolute; top: 8px; right: 8px; background: none; border: none; color: #ccc; cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px; }}
+.note-card-delete:hover {{ color: #e53935; background: #ffebee; }}
+
+.note-modal-overlay {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1100; display: none; align-items: center; justify-content: center; }}
+.note-modal-overlay.show {{ display: flex; }}
+.note-modal {{ background: white; border-radius: 12px; padding: 24px; width: 420px; max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }}
+.note-modal h3 {{ font-size: 16px; font-weight: 600; color: #333; margin-bottom: 8px; }}
+.note-modal .note-source-preview {{ font-size: 12px; color: #888; background: #f0f0f0; padding: 8px 12px; border-radius: 6px; margin-bottom: 12px; max-height: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+.note-modal textarea {{ width: 100%; min-height: 100px; border: 1px solid #ddd; border-radius: 8px; padding: 10px; font-size: 14px; font-family: inherit; resize: vertical; outline: none; }}
+.note-modal textarea:focus {{ border-color: #1a73e8; box-shadow: 0 0 0 2px rgba(26,115,232,0.2); }}
+.note-modal-actions {{ display: flex; gap: 8px; margin-top: 12px; justify-content: flex-end; }}
+.note-overlay {{ position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.3); z-index: 990; display: none; }}
+.note-overlay.show {{ display: block; }}
 </style>
 </head>
 <body>
@@ -346,9 +450,22 @@ body {{ font-family: "{chinese_font}", sans-serif; background: #f0f2f5; color: #
         </div>
     </div>
     <div class="section-block">
-        <h2 class="section-title">正文样式预览</h2>
-        <div style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 16px; background: #fff;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+            <h2 class="section-title" style="margin-bottom:0;">正文样式预览</h2>
+            <div class="view-toggle">
+                <button class="active" onclick="switchView('list',this)" title="列表视图">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+                </button>
+                <button onclick="switchView('page',this)" title="分页视图">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 21,8"/></svg>
+                </button>
+            </div>
+        </div>
+        <div id="body-view-list" style="border: 1px solid #e0e0e0; border-radius: 6px; padding: 16px; background: #fff;">
             {body_items}
+        </div>
+        <div id="body-view-page" class="pages-container" style="display:none;">
+            {body_pages_html}
         </div>
     </div>
 </div>
@@ -740,6 +857,13 @@ function applyTranslations() {{
 // Initialize language
 applyTranslations();
 
+function switchView(mode, btn) {{
+    document.getElementById('body-view-list').style.display = mode === 'list' ? 'block' : 'none';
+    document.getElementById('body-view-page').style.display = mode === 'page' ? 'flex' : 'none';
+    document.querySelectorAll('.view-toggle button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+}}
+
 function toggleSection(name) {{
     const cb = document.getElementById("cfg-" + name + "-enabled");
     const body = document.getElementById(name + "-options");
@@ -870,13 +994,216 @@ function confirmDesign() {{
         setTimeout(() => window.close(), 2000);
     }});
 }}
+
+/* ===== Note Annotation System ===== */
+let noteState = {{ notes: [], currentTarget: null }};
+
+function onAnnotatableClick(el) {{
+    const section = el.dataset.section;
+    const idx = parseInt(el.dataset.idx);
+    const text = el.textContent.trim().substring(0, 80);
+    noteState.currentTarget = {{ section, idx, text, element: el }};
+    showNoteModal(section, idx, text);
+}}
+
+function showNoteModal(section, idx, text) {{
+    const overlay = document.getElementById('note-modal-overlay');
+    const source = document.getElementById('note-source-preview');
+    const textarea = document.getElementById('note-textarea');
+    source.textContent = '[' + section.toUpperCase() + '] ' + text;
+    // Pre-fill if editing existing note
+    const existing = noteState.notes.find(n => n.section === section && n.idx === idx);
+    textarea.value = existing ? existing.note : '';
+    overlay.classList.add('show');
+    textarea.focus();
+}}
+
+function closeNoteModal() {{
+    document.getElementById('note-modal-overlay').classList.remove('show');
+    noteState.currentTarget = null;
+}}
+
+function submitNote() {{
+    const textarea = document.getElementById('note-textarea');
+    const noteText = textarea.value.trim();
+    if (!noteText || !noteState.currentTarget) return;
+
+    const {{ section, idx, text, element }} = noteState.currentTarget;
+
+    // Remove existing note for same target
+    noteState.notes = noteState.notes.filter(n => !(n.section === section && n.idx === idx));
+
+    // Add new note
+    noteState.notes.push({{ section, idx, source_text: text, note: noteText, created_at: new Date().toISOString() }});
+
+    // Update UI
+    element.classList.add('has-note');
+    const badge = element.querySelector('.note-badge');
+    if (badge) badge.style.display = 'flex';
+
+    // Sync to server
+    fetch('/api/add_note', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ section, idx, source_text: text, note: noteText }})
+    }});
+
+    closeNoteModal();
+    renderNotePanel();
+    updateFabCount();
+}}
+
+function deleteNote(section, idx) {{
+    noteState.notes = noteState.notes.filter(n => !(n.section === section && n.idx === idx));
+
+    // Update annotatable element
+    const el = document.querySelector(`.annotatable[data-section="${{section}}"][data-idx="${{idx}}"]`);
+    if (el) {{
+        el.classList.remove('has-note');
+        const badge = el.querySelector('.note-badge');
+        if (badge) badge.style.display = 'none';
+    }}
+
+    // Sync to server
+    fetch('/api/delete_note', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ section, idx }})
+    }});
+
+    renderNotePanel();
+    updateFabCount();
+}}
+
+function toggleNotePanel() {{
+    const panel = document.getElementById('note-panel');
+    const overlay = document.getElementById('note-overlay');
+    panel.classList.toggle('open');
+    overlay.classList.toggle('show');
+    if (panel.classList.contains('open')) renderNotePanel();
+}}
+
+function closeNotePanel() {{
+    document.getElementById('note-panel').classList.remove('open');
+    document.getElementById('note-overlay').classList.remove('show');
+}}
+
+function renderNotePanel() {{
+    const body = document.getElementById('note-panel-body');
+    if (noteState.notes.length === 0) {{
+        body.innerHTML = '<div class="note-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg><div>暂无标注笔记</div><div style="font-size:12px;margin-top:4px;color:#bbb;">点击预览中的任意元素添加修改建议</div></div>';
+        return;
+    }}
+    body.innerHTML = noteState.notes.map((n, i) => `
+        <div class="note-card">
+            <div class="note-card-header">
+                <span class="note-card-source">${{n.section.toUpperCase()}} #${{n.idx + 1}}</span>
+            </div>
+            <div class="note-card-text">${{n.source_text}}</div>
+            <div style="font-size:12px;color:#555;margin-top:6px;padding-top:6px;border-top:1px dashed #ddd;">${{n.note}}</div>
+            <button class="note-card-delete" onclick="deleteNote('${{n.section}}', ${{n.idx}})" title="删除">×</button>
+        </div>
+    `).join('');
+}}
+
+function updateFabCount() {{
+    const count = noteState.notes.length;
+    const fab = document.getElementById('note-fab-count');
+    if (count > 0) {{
+        fab.textContent = count;
+        fab.style.display = 'flex';
+    }} else {{
+        fab.style.display = 'none';
+    }}
+}}
+
+function saveAllNotes() {{
+    fetch('/api/save_notes', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ notes: noteState.notes }})
+    }}).then(r => r.json()).then(d => {{
+        alert('已保存 ' + d.count + ' 条标注笔记');
+    }});
+}}
+
+function confirmWithNotes() {{
+    fetch('/api/confirm_notes', {{
+        method: 'POST',
+        headers: {{ 'Content-Type': 'application/json' }},
+        body: JSON.stringify({{ notes: noteState.notes }})
+    }}).then(r => r.json()).then(d => {{
+        closeNotePanel();
+        alert('已确认 ' + d.count + ' 条标注，将在后续格式化中应用');
+    }});
+}}
+
+// Initialize notes from server state
+fetch('/api/get_notes').then(r => r.json()).then(d => {{
+    noteState.notes = d.notes || [];
+    // Mark existing notes on elements
+    noteState.notes.forEach(n => {{
+        const el = document.querySelector(`.annotatable[data-section="${{n.section}}"][data-idx="${{n.idx}}"]`);
+        if (el) {{
+            el.classList.add('has-note');
+            const badge = el.querySelector('.note-badge');
+            if (badge) badge.style.display = 'flex';
+        }}
+    }});
+    updateFabCount();
+}}).catch(() => {{}});
 </script>
+
+<!-- Note FAB Button -->
+<button class="note-fab" id="note-fab" onclick="toggleNotePanel()" title="标注笔记">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15.5 3H5a2 2 0 00-2 2v14c0 1.1.9 2 2 2h14a2 2 0 002-2V8.5L15.5 3z"/><polyline points="14,3 14,8 21,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg>
+    <span class="fab-count" id="note-fab-count" style="display:none;">0</span>
+</button>
+
+<!-- Note Overlay -->
+<div class="note-overlay" id="note-overlay" onclick="closeNotePanel()"></div>
+
+<!-- Note Panel (slide-in from right) -->
+<div class="note-panel" id="note-panel">
+    <div class="note-panel-header">
+        <h3>标注笔记</h3>
+        <button class="note-panel-close" onclick="closeNotePanel()">×</button>
+    </div>
+    <div class="note-panel-body" id="note-panel-body"></div>
+    <div class="note-panel-footer">
+        <button class="btn btn-secondary" style="flex:1;" onclick="saveAllNotes()">保存笔记</button>
+        <button class="btn btn-primary" style="flex:1;" onclick="confirmWithNotes()">确认标注</button>
+    </div>
+</div>
+
+<!-- Note Modal (center) -->
+<div class="note-modal-overlay" id="note-modal-overlay">
+    <div class="note-modal">
+        <h3>添加修改建议</h3>
+        <div class="note-source-preview" id="note-source-preview"></div>
+        <textarea id="note-textarea" placeholder="请输入您的修改建议或备注..."></textarea>
+        <div class="note-modal-actions">
+            <button class="btn btn-secondary" onclick="closeNoteModal()">取消</button>
+            <button class="btn btn-primary" onclick="submitNote()">添加标注</button>
+        </div>
+    </div>
+</div>
 </body>
 </html>'''
     return html
 
 
 class PreviewHandler(BaseHTTPRequestHandler):
+    def _send_json(self, data, status=200):
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.end_headers()
+        self.wfile.write(json.dumps(data, ensure_ascii=False).encode("utf-8"))
+
+    def _read_body(self):
+        length = int(self.headers.get("Content-Length", 0))
+        return json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+
     def do_GET(self):
         parsed = urlparse(self.path)
         if parsed.path == "/" or parsed.path == "/preview":
@@ -885,24 +1212,60 @@ class PreviewHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(html.encode("utf-8"))
+        elif parsed.path == "/api/get_notes":
+            self._send_json({"notes": STATE.notes})
         else:
             self.send_response(404)
             self.end_headers()
 
     def do_POST(self):
         if self.path == "/confirm":
-            length = int(self.headers.get("Content-Length", 0))
-            body = self.rfile.read(length)
-            data = json.loads(body.decode("utf-8"))
+            data = self._read_body()
             STATE.confirmed = True
             STATE.cover_preserved = data.get("cover_preserved", True)
             STATE.toc_preserved = data.get("toc_preserved", True)
             STATE.edited_config = data
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            self.wfile.write(json.dumps({"status": "ok"}).encode("utf-8"))
+            self._send_json({"status": "ok"})
             threading.Thread(target=lambda: self.server.shutdown(), daemon=True).start()
+
+        elif self.path == "/api/add_note":
+            data = self._read_body()
+            section = data.get("section", "")
+            idx = data.get("idx", -1)
+            # Remove existing note for same target
+            STATE.notes = [n for n in STATE.notes if not (n.get("section") == section and n.get("idx") == idx)]
+            STATE.notes.append(data)
+            self._send_json({"status": "ok", "count": len(STATE.notes)})
+
+        elif self.path == "/api/delete_note":
+            data = self._read_body()
+            section = data.get("section", "")
+            idx = data.get("idx", -1)
+            STATE.notes = [n for n in STATE.notes if not (n.get("section") == section and n.get("idx") == idx)]
+            self._send_json({"status": "ok", "count": len(STATE.notes)})
+
+        elif self.path == "/api/save_notes":
+            data = self._read_body()
+            STATE.notes = data.get("notes", [])
+            # Save to workspace/validated/notes.json
+            output_dir = Path("workspace/validated")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            with open(output_dir / "notes.json", "w", encoding="utf-8") as f:
+                json.dump({"notes": STATE.notes}, f, ensure_ascii=False, indent=2)
+            print(f"[INFO] Notes saved: {len(STATE.notes)} items to {output_dir / 'notes.json'}")
+            self._send_json({"status": "ok", "count": len(STATE.notes), "path": str(output_dir / "notes.json")})
+
+        elif self.path == "/api/confirm_notes":
+            data = self._read_body()
+            STATE.notes = data.get("notes", [])
+            # Save notes and return
+            output_dir = Path("workspace/validated")
+            output_dir.mkdir(parents=True, exist_ok=True)
+            with open(output_dir / "notes.json", "w", encoding="utf-8") as f:
+                json.dump({"notes": STATE.notes, "confirmed": True}, f, ensure_ascii=False, indent=2)
+            print(f"[INFO] Notes confirmed: {len(STATE.notes)} items")
+            self._send_json({"status": "ok", "count": len(STATE.notes)})
+
         else:
             self.send_response(404)
             self.end_headers()
@@ -947,17 +1310,24 @@ def run_preview(ast_path, template_config_path, source_docx_path=None):
         "user_confirmed": STATE.confirmed,
         "cover_preserved": STATE.cover_preserved,
         "toc_preserved": STATE.toc_preserved,
-        "edited_config": STATE.edited_config
+        "edited_config": STATE.edited_config,
+        "notes": STATE.notes
     }
 
+    output_dir = Path("workspace/validated")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
     if STATE.edited_config:
-        output_dir = Path("workspace/validated")
-        output_dir.mkdir(parents=True, exist_ok=True)
         with open(output_dir / "edited_config.json", "w", encoding="utf-8") as f:
             json.dump(STATE.edited_config, f, ensure_ascii=False, indent=2)
         print(f"[INFO] User edited config saved to: {output_dir / 'edited_config.json'}")
 
-    print(f"[INFO] User confirmed: {STATE.confirmed}")
+    if STATE.notes:
+        with open(output_dir / "notes.json", "w", encoding="utf-8") as f:
+            json.dump({"notes": STATE.notes}, f, ensure_ascii=False, indent=2)
+        print(f"[INFO] Notes saved: {len(STATE.notes)} items to {output_dir / 'notes.json'}")
+
+    print(f"[INFO] User confirmed: {STATE.confirmed}, Notes: {len(STATE.notes)}")
     return result
 
 
