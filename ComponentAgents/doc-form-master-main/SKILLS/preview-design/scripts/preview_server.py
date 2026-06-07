@@ -58,10 +58,11 @@ DEFAULT_TEMPLATE = {
 
 
 class PreviewState:
-    def __init__(self, ast_path, template_config_path, source_docx_path=None):
+    def __init__(self, ast_path, template_config_path, source_docx_path=None, workspace=None):
         self.ast_path = Path(ast_path)
         self.template_config_path = Path(template_config_path)
         self.source_docx_path = Path(source_docx_path) if source_docx_path else None
+        self.workspace = Path(workspace) if workspace else Path("workspace")
         self.ast = self._load_json(self.ast_path)
         self.template_config = self._load_json(self.template_config_path)
         self.confirmed = False
@@ -1247,8 +1248,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/save_notes":
             data = self._read_body()
             STATE.notes = data.get("notes", [])
-            # Save to workspace/validated/notes.json
-            output_dir = Path("workspace/validated")
+            output_dir = STATE.workspace / "validated"
             output_dir.mkdir(parents=True, exist_ok=True)
             with open(output_dir / "notes.json", "w", encoding="utf-8") as f:
                 json.dump({"notes": STATE.notes}, f, ensure_ascii=False, indent=2)
@@ -1258,8 +1258,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
         elif self.path == "/api/confirm_notes":
             data = self._read_body()
             STATE.notes = data.get("notes", [])
-            # Save notes and return
-            output_dir = Path("workspace/validated")
+            output_dir = STATE.workspace / "validated"
             output_dir.mkdir(parents=True, exist_ok=True)
             with open(output_dir / "notes.json", "w", encoding="utf-8") as f:
                 json.dump({"notes": STATE.notes, "confirmed": True}, f, ensure_ascii=False, indent=2)
@@ -1285,9 +1284,9 @@ def find_free_port(start=8765, end=8770):
     return start
 
 
-def run_preview(ast_path, template_config_path, source_docx_path=None):
+def run_preview(ast_path, template_config_path, source_docx_path=None, workspace=None):
     global STATE
-    STATE = PreviewState(ast_path, template_config_path, source_docx_path)
+    STATE = PreviewState(ast_path, template_config_path, source_docx_path, workspace)
 
     port = find_free_port()
     server = HTTPServer(("127.0.0.1", port), PreviewHandler)
@@ -1314,7 +1313,7 @@ def run_preview(ast_path, template_config_path, source_docx_path=None):
         "notes": STATE.notes
     }
 
-    output_dir = Path("workspace/validated")
+    output_dir = STATE.workspace / "validated"
     output_dir.mkdir(parents=True, exist_ok=True)
 
     if STATE.edited_config:
@@ -1334,10 +1333,11 @@ def run_preview(ast_path, template_config_path, source_docx_path=None):
 if __name__ == "__main__":
     import sys
     if len(sys.argv) >= 3:
-        result = run_preview(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None)
+        ws = sys.argv[4] if len(sys.argv) > 4 else None
+        result = run_preview(sys.argv[1], sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else None, ws)
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
-        print("Usage: python preview_server.py <ast.json> <template_config.json> [source.docx]")
+        print("Usage: python preview_server.py <ast.json> <template_config.json> [source.docx] [workspace]")
         print()
         print("Example:")
-        print("  python preview_server.py workspace/parsed/document_ast.json workspace/validated/template_config.json workspace/input/input.docx")
+        print("  python preview_server.py WORKSPACE/Project/doc-form-master/parsed/document_ast.json WORKSPACE/Project/doc-form-master/validated/template_config.json WORKSPACE/Project/doc-form-master/input/input.docx WORKSPACE/Project/doc-form-master")

@@ -60,14 +60,16 @@ doc-compatibility → markdown-converter → docx-parser → xml-safety → form
 
 **⚠️ 关键规则：所有标记为 🔒 的步骤为强制交互检查点，必须等待用户确认后才能继续下一步。禁止跳过任何交互检查点！**
 
+**工作区约定**：本 AGENT 的工作目录由调度器（AGENTS.md）创建，路径为 `WORKSPACE/{ProjectName}/doc-form-master/`。下文以 `{workspace}` 表示此路径。SKILL 脚本路径仍从 `SKILLS/` 目录加载（相对于本 AGENT 目录）。
+
 ## Step 1-2: 初始化
-创建工作区目录（input/output/parsed/normalized/validated/reports/logs/temp/checkpoints），复制用户文件到 `workspace/input/`
+创建工作区子目录（input/output/parsed/normalized/validated/reports/logs/temp/checkpoints），复制用户文件到 `{workspace}/input/`
 
 ## Step 2b: DOC 兼容性检查
 读取 `SKILLS/doc-compatibility/SKILL.md`，检测输入文件是否为旧版 .doc 格式：
 - 如果是 .doc 格式，调用 `doc_converter.py` 转换为 .docx
 - 转换方法优先级：win32com（Word）→ LibreOffice
-- 转换后更新 `workspace/input/input.docx` 路径
+- 转换后更新 `{workspace}/input/input.docx` 路径
 - 如果是 .docx 格式，跳过此步骤
 
 ```python
@@ -76,8 +78,8 @@ sys.path.insert(0, 'SKILLS/doc-compatibility/scripts')
 from doc_converter import DocConverter
 
 converter = DocConverter()
-if converter.is_doc_format('workspace/input/input.doc'):
-    result = converter.convert('workspace/input/input.doc', 'workspace/input/input.docx')
+if converter.is_doc_format('{workspace}/input/input.doc'):
+    result = converter.convert('{workspace}/input/input.doc', '{workspace}/input/input.docx')
 ```
 
 ## Step 2c: Markdown 转换（如输入为 .md/.txt）
@@ -85,7 +87,7 @@ if converter.is_doc_format('workspace/input/input.doc'):
 - 如果是 .md/.txt 格式且包含 Markdown 内容，调用 `md_converter.py` 转换为 .docx
 - 自动检测并格式化 LaTeX 数学公式（添加 `$` 分隔符）
 - 使用 pandoc 转换为 DOCX（支持 MathML 公式渲染）
-- 转换后更新 `workspace/input/input.docx` 路径
+- 转换后更新 `{workspace}/input/input.docx` 路径
 - 如果是 .docx 格式，跳过此步骤
 
 ```python
@@ -94,8 +96,8 @@ sys.path.insert(0, 'SKILLS/markdown-converter/scripts')
 from md_converter import MarkdownConverter
 
 converter = MarkdownConverter()
-if converter._is_markdown('workspace/input/input.md'):
-    result = converter.convert('workspace/input/input.md', 'workspace/input/input.docx')
+if converter._is_markdown('{workspace}/input/input.md'):
+    result = converter.convert('{workspace}/input/input.md', '{workspace}/input/input.docx')
 ```
 
 ## Step 3: 解析文档
@@ -159,9 +161,10 @@ sys.path.insert(0, 'SKILLS/preview-design/scripts')
 from preview_server import run_preview
 
 result = run_preview(
-    'workspace/parsed/document_ast.json',
-    'workspace/validated/template_config.json',
-    'workspace/input/input.docx'
+    '{workspace}/parsed/document_ast.json',
+    '{workspace}/validated/template_config.json',
+    '{workspace}/input/input.docx',
+    '{workspace}'  # 工作区路径，用于保存配置和标注
 )
 # 服务器启动后自动打开浏览器，用户在浏览器中确认设计并添加标注
 # 返回结果包含用户编辑后的配置和标注笔记
@@ -173,7 +176,7 @@ result = run_preview(
 - 页眉页脚
 - 正文样式
 
-**将用户确认的配置保存到 `workspace/validated/edited_config.json`**
+**将用户确认的配置保存到 `{workspace}/validated/edited_config.json`**
 
 **禁止**：跳过 Web 预览，仅用文字摘要代替
 
@@ -188,7 +191,7 @@ result = run_preview(
 4. 标注面板中可查看、删除所有标注
 5. 点击"保存笔记"保存到文件，或"确认标注"提交
 
-**标注输出** `workspace/validated/notes.json`：
+**标注输出** `{workspace}/validated/notes.json`：
 
 ```json
 {
@@ -207,7 +210,7 @@ result = run_preview(
 **后续处理**：AGENT 读取 `notes.json`，根据用户建议调整格式化参数或文档内容。
 
 ## Step 9a/9b: 格式化
-读取 `workspace/validated/edited_config.json` 中的用户确认配置（如有），与 `template_config.json` 合并后：
+读取 `{workspace}/validated/edited_config.json` 中的用户确认配置（如有），与 `template_config.json` 合并后：
 - **已格式化**：使用 `smart_mode=True` 调用 `normalizer.py`，然后 `ast_to_docx.py` 处理
   - **智能模式**：只标准化标题样式，保留正文原始格式（字体、字号、行距、缩进）
   - **封面保护**：封面段落标记为 protected，不被格式化覆盖
@@ -225,11 +228,11 @@ sys.path.insert(0, 'SKILLS/zero-format-normalizer/scripts')
 from zero_format_normalizer import ZeroFormatNormalizer
 
 normalizer = ZeroFormatNormalizer(
-    'workspace/input/input.docx',
-    'workspace/validated/template_config.json',
-    'workspace/validated/edited_config.json'  # 必须传入用户编辑配置
+    '{workspace}/input/input.docx',
+    '{workspace}/validated/template_config.json',
+    '{workspace}/validated/edited_config.json'  # 必须传入用户编辑配置
 )
-normalizer.run('workspace/output/formatted.docx')
+normalizer.run('{workspace}/output/formatted.docx')
 ```
 
 **注意**：格式标准化完成后，会自动调用 `table-processor` 进行表格格式化处理（见 Step 9b）。
@@ -263,9 +266,9 @@ import sys
 sys.path.insert(0, 'SKILLS/table-processor/scripts')
 from table_processor import TableProcessor
 
-processor = TableProcessor('workspace/output/formatted.docx', 'workspace/validated/template_config.json')
+processor = TableProcessor('{workspace}/output/formatted.docx', '{workspace}/validated/template_config.json')
 processor.run()
-processor.save('workspace/output/formatted.docx')
+processor.save('{workspace}/output/formatted.docx')
 ```
 
 ## Step 9b2: 脚注格式化处理
@@ -295,9 +298,9 @@ import sys
 sys.path.insert(0, 'SKILLS/footnote-processor/scripts')
 from footnote_processor import FootnoteProcessor
 
-processor = FootnoteProcessor('workspace/output/formatted.docx')
+processor = FootnoteProcessor('{workspace}/output/formatted.docx')
 processor.run()
-processor.save('workspace/output/formatted.docx')
+processor.save('{workspace}/output/formatted.docx')
 ```
 
 ## Step 9c: 页边距设置
@@ -312,7 +315,7 @@ sys.path.insert(0, 'SKILLS/margin-manager/scripts')
 from margin_manager import MarginManager
 
 manager = MarginManager()
-result = manager.apply_margins('workspace/output/formatted.docx', standard='academic')
+result = manager.apply_margins('{workspace}/output/formatted.docx', standard='academic')
 ```
 
 ## Step 10-12: 后续处理
@@ -378,9 +381,9 @@ WEB 界面功能：
 # 输出规则
 
 ```
-workspace/output/final.docx    # 格式化 DOCX
-workspace/output/final.pdf     # PDF（如需）
-workspace/reports/             # 处理报告
+{workspace}/output/final.docx    # 格式化 DOCX
+{workspace}/output/final.pdf     # PDF（如需）
+{workspace}/reports/             # 处理报告
 ```
 
 ---

@@ -2,8 +2,8 @@
 name: doc-content-analysis
 description: 文档内容读取与分析 Agent，支持多个 DOC/DOCX/PDF 文件的批量转换、内容提取、图片提取和智能总结。
 tools: [python]
-input: workspace/input/（.doc/.docx/.pdf 文件，由调度器放置）
-output: workspace/summary/（结构化 JSON 总结 + MD 可读总结 + 提取的图片）
+input: {workspace}/input/（.doc/.docx/.pdf 文件，由调度器放置）
+output: {workspace}/summary/（结构化 JSON 总结 + MD 可读总结 + 提取的图片）
 ---
 
 # Doc Content Analysis Agent
@@ -11,6 +11,8 @@ output: workspace/summary/（结构化 JSON 总结 + MD 可读总结 + 提取的
 文档内容读取与分析 Agent。职责：扫描用户文档、批量转换格式、提取文档文本和图片、生成结构化总结（JSON + MD 格式）。
 
 **核心原则**：非破坏性处理、不覆盖原文件、不修改原始文档、只读访问。
+
+**工作区约定**：本 AGENT 的工作目录由调度器（AGENTS.md）创建，路径为 `WORKSPACE/{ProjectName}/doc-content-analysis/`。下文以 `{workspace}` 表示此路径。
 
 ---
 
@@ -22,27 +24,27 @@ output: workspace/summary/（结构化 JSON 总结 + MD 可读总结 + 提取的
 
 调度器（AGENTS.md / Workflow）通过以下方式调用本 Agent：
 
-1. 将待处理文档放入 `workspace/input/`
+1. 将待处理文档放入 `{workspace}/input/`
 2. 加载 AGENT.md 作为 Agent 配置
 3. 触发执行流程（Step 1 → Step 5）
 
 ## 输入规则
 
 ```
-workspace/input/
+{workspace}/input/
 ├── *.doc        # 旧版 Word 文档
 ├── *.docx       # Word 文档
 └── *.pdf        # PDF 文档
 ```
 
-- 调度器负责将原始文档复制到 `workspace/input/`
-- 本 Agent 不修改 `workspace/input/` 中的任何文件
+- 调度器负责将原始文档复制到 `{workspace}/input/`
+- 本 Agent 不修改 `{workspace}/input/` 中的任何文件
 - 支持同时传入多个文档
 
 ## 输出规则
 
 ```
-workspace/summary/
+{workspace}/summary/
 ├── manifest.json              # 处理清单（机器可读，供调度器/下游 Agent 消费）
 ├── <文件名1>/
 │   ├── text/
@@ -73,20 +75,20 @@ workspace/summary/
     {
       "source_file": "report1.doc",
       "status": "success",
-      "output_dir": "workspace/summary/report1/",
-      "content_json": "workspace/summary/report1/text/content.json",
-      "summary_json": "workspace/summary/report1/text/summary.json",
-      "summary_md": "workspace/summary/report1/text/summary.md",
+      "output_dir": "{workspace}/summary/report1/",
+      "content_json": "{workspace}/summary/report1/text/content.json",
+      "summary_json": "{workspace}/summary/report1/text/summary.json",
+      "summary_md": "{workspace}/summary/report1/text/summary.md",
       "image_count": 5,
       "has_img_summary": true
     },
     {
       "source_file": "report2.pdf",
       "status": "success",
-      "output_dir": "workspace/summary/report2/",
-      "content_json": "workspace/summary/report2/text/content.json",
-      "summary_json": "workspace/summary/report2/text/summary.json",
-      "summary_md": "workspace/summary/report2/text/summary.md",
+      "output_dir": "{workspace}/summary/report2/",
+      "content_json": "{workspace}/summary/report2/text/content.json",
+      "summary_json": "{workspace}/summary/report2/text/summary.json",
+      "summary_md": "{workspace}/summary/report2/text/summary.md",
       "image_count": 0,
       "has_img_summary": false
     },
@@ -97,8 +99,8 @@ workspace/summary/
     }
   ],
   "has_combined_summary": true,
-  "combined_summary_json": "workspace/summary/综合总结.json",
-  "combined_summary_md": "workspace/summary/综合总结.md"
+  "combined_summary_json": "{workspace}/summary/综合总结.json",
+  "combined_summary_md": "{workspace}/summary/综合总结.md"
 }
 ```
 
@@ -132,7 +134,7 @@ workspace/summary/
       "level": 2,
       "paragraph_range": [1, 15],
       "key_points": ["要点1", "要点2"],
-      "content_link": "workspace/summary/report1/text/content.json#/paragraphs/0-14"
+      "content_link": "{workspace}/summary/report1/text/content.json#/paragraphs/0-14"
     }
   ],
 
@@ -149,25 +151,25 @@ workspace/summary/
       "rows": 5,
       "columns": 4,
       "location": "paragraph_8",
-      "content_link": "workspace/summary/report1/text/content.json#/tables/0"
+      "content_link": "{workspace}/summary/report1/text/content.json#/tables/0"
     }
   ],
 
   "images": [
     {
       "file": "image_1.png",
-      "path": "workspace/summary/report1/img/image_1.png",
+      "path": "{workspace}/summary/report1/img/image_1.png",
       "description": "图片内容简要描述",
       "has_text": true,
-      "ocr_link": "workspace/summary/report1/img/text/image_1.txt",
-      "summary_link": "workspace/summary/report1/img/img-summary/image_1.md"
+      "ocr_link": "{workspace}/summary/report1/img/text/image_1.txt",
+      "summary_link": "{workspace}/summary/report1/img/img-summary/image_1.md"
     }
   ],
 
   "content_links": {
-    "content_json": "workspace/summary/report1/text/content.json",
-    "summary_md": "workspace/summary/report1/text/summary.md",
-    "images_dir": "workspace/summary/report1/img/"
+    "content_json": "{workspace}/summary/report1/text/content.json",
+    "summary_md": "{workspace}/summary/report1/text/summary.md",
+    "images_dir": "{workspace}/summary/report1/img/"
   }
 }
 ```
@@ -212,7 +214,7 @@ workspace/summary/
 # Skills 索引（按需加载，禁止预读）
 
 ```
-doc-convertor → AI 总结 → img-reader（可选，需视觉能力） → 输出 workspace/summary/
+doc-convertor → AI 总结 → img-reader（可选，需视觉能力） → 输出 {workspace}/summary/
 ```
 
 | Skill | 类型 | 执行方式 | 触发条件 |
@@ -239,36 +241,33 @@ doc-convertor → AI 总结 → img-reader（可选，需视觉能力） → 输
 
 # 工作区规则
 
-**工作区路径**：`doc-content-analysis/workspace/`（位于 AGENT 根目录下）
+**工作区路径**：`WORKSPACE/{ProjectName}/doc-content-analysis/`（由调度器创建）
 
 工作区是 AGENT 调用各 SKILL 后输出内容的唯一存放位置。所有中间结果和最终输出均写入工作区，原始文档仅以只读方式访问。
 
 ```
-doc-content-analysis/
-├── AGENT.md
-├── SKILLS/
-└── workspace/                  # AGENT 工作区（AGENT 根目录下）
-    ├── input/                  # 用户放置原始文档（只读，不修改）
-    ├── converted/              # SKILL 输出：格式转换后的 .docx
-    └── summary/                # 最终输出
-        ├── manifest.json       # 处理清单（供调度器消费）
-        ├── <文件名1>/
-        │   ├── text/           # content.json + summary.json + summary.md
-        │   └── img/            # 提取的图片 + text/ + img-summary/
-        ├── <文件名2>/
-        │   ├── text/
-        │   └── img/
-        ├── 综合总结.json        # 多文档综合总结（仅多文档时生成）
-        └── 综合总结.md          # 多文档综合总结（仅多文档时生成）
+WORKSPACE/{ProjectName}/doc-content-analysis/
+├── input/                      # 用户放置原始文档（只读，不修改）
+├── converted/                  # SKILL 输出：格式转换后的 .docx
+└── summary/                    # 最终输出
+    ├── manifest.json           # 处理清单（供调度器消费）
+    ├── <文件名1>/
+    │   ├── text/               # content.json + summary.json + summary.md
+    │   └── img/                # 提取的图片 + text/ + img-summary/
+    ├── <文件名2>/
+    │   ├── text/
+    │   └── img/
+    ├── 综合总结.json            # 多文档综合总结（仅多文档时生成）
+    └── 综合总结.md              # 多文档综合总结（仅多文档时生成）
 ```
 
 **约束**：
-- AGENT 读取 SKILL.MD 后调用 SKILL 脚本，SKILL 的输出统一写入 `workspace/` 对应子目录
-- `workspace/input/` 仅存放用户原始文档，AGENT 和 SKILL 均不得修改
-- `workspace/converted/` 存放格式转换后的文件（SKILL 输出）
-- `workspace/summary/<文件名>/text/` 存放 content.json、summary.json 和 summary.md
-- `workspace/summary/<文件名>/img/` 存放从文档中提取的图片
-- `workspace/summary/manifest.json` 是调度器读取处理结果的入口
+- AGENT 读取 SKILL.MD 后调用 SKILL 脚本，SKILL 的输出统一写入 `{workspace}/` 对应子目录
+- `{workspace}/input/` 仅存放用户原始文档，AGENT 和 SKILL 均不得修改
+- `{workspace}/converted/` 存放格式转换后的文件（SKILL 输出）
+- `{workspace}/summary/<文件名>/text/` 存放 content.json、summary.json 和 summary.md
+- `{workspace}/summary/<文件名>/img/` 存放从文档中提取的图片
+- `{workspace}/summary/manifest.json` 是调度器读取处理结果的入口
 - 工作区在每次任务开始时创建，已存在则清空非 input 目录
 
 ---
@@ -288,7 +287,7 @@ doc-content-analysis/
 - 总结语言偏好（默认与输入文档语言一致）
 
 **空输入检查**：
-- 扫描 `workspace/input/` 后如果没有匹配文件，立即告知调度器并终止
+- 扫描 `{workspace}/input/` 后如果没有匹配文件，立即告知调度器并终止
 - 匹配文件为空时，生成 `manifest.json`（`status: "empty"`, `total_files: 0`）
 
 ## Step 2: 初始化工作区
@@ -303,14 +302,14 @@ workspace/
 ```
 
 **关键操作**：
-1. 创建 `workspace/input/`、`workspace/converted/`、`workspace/summary/`
-2. 将用户提供的所有文档复制到 `workspace/input/`
-3. 扫描 `workspace/input/` 下所有文件，统计类型和数量
+1. 创建 `{workspace}/input/`、`{workspace}/converted/`、`{workspace}/summary/`
+2. 将用户提供的所有文档复制到 `{workspace}/input/`
+3. 扫描 `{workspace}/input/` 下所有文件，统计类型和数量
 
 ```python
 from pathlib import Path
 
-input_dir = Path('workspace/input')
+input_dir = Path('{workspace}/input')
 files = []
 for ext in ['*.doc', '*.docx', '*.pdf', '*.txt']:
     files.extend(input_dir.glob(ext))
@@ -330,19 +329,19 @@ sys.path.insert(0, 'SKILLS/doc-convertor/scripts')
 from doc_converter import DocConverter
 
 converter = DocConverter()
-result = converter.process_all('workspace/input/', 'workspace/')
+result = converter.process_all('{workspace}/input/', '{workspace}/')
 ```
 
 **`process_all()` 内部执行**：
 
 1. **格式转换**（`.pdf` → `.docx`，`.doc` → `.docx`，`.docx` 直接复制）
-   - 输出到 `workspace/converted/`
+   - 输出到 `{workspace}/converted/`
 
 2. **文本内容提取**（从每个 `.docx` 中提取段落、标题、表格）
-   - 输出到 `workspace/summary/<文件名>/text/content.json`
+   - 输出到 `{workspace}/summary/<文件名>/text/content.json`
 
 3. **图片提取**（从每个 `.docx` 中提取所有嵌入图片）
-   - 输出到 `workspace/summary/<文件名>/img/`
+   - 输出到 `{workspace}/summary/<文件名>/img/`
 
 **转换规则**：
 - `.doc` → `.docx`（优先 win32com，其次 LibreOffice）
@@ -364,9 +363,9 @@ AI 助手读取每个文档的 `content.json`，为每个文档生成 **summary.
 
 ### 4a. 单文档总结
 
-读取 `workspace/summary/<文件名>/text/content.json`，生成：
-- `workspace/summary/<文件名>/text/summary.json`（结构化索引，供下游 Agent 消费）
-- `workspace/summary/<文件名>/text/summary.md`（人类可读）
+读取 `{workspace}/summary/<文件名>/text/content.json`，生成：
+- `{workspace}/summary/<文件名>/text/summary.json`（结构化索引，供下游 Agent 消费）
+- `{workspace}/summary/<文件名>/text/summary.md`（人类可读）
 
 **summary.json 为索引文件，必须包含**：
 - 文档元信息（id、title、source_file、author、language）
@@ -423,8 +422,8 @@ AI 助手读取每个文档的 `content.json`，为每个文档生成 **summary.
 ### 4b. 综合总结（多文档场景）
 
 当用户提供多个文档时，额外生成：
-- `workspace/summary/综合总结.json`（结构化）
-- `workspace/summary/综合总结.md`（人类可读）
+- `{workspace}/summary/综合总结.json`（结构化）
+- `{workspace}/summary/综合总结.md`（人类可读）
 
 **综合总结.json 结构**：
 
@@ -461,9 +460,9 @@ reader = ImgReader()
 
 # 对每个文档的 img/ 目录执行 OCR 批量处理
 results = reader.process_batch(
-    img_dir='workspace/summary/报告/img/',
-    text_dir='workspace/summary/报告/img/text/',
-    summary_dir='workspace/summary/报告/img/img-summary/'
+    img_dir='{workspace}/summary/报告/img/',
+    text_dir='{workspace}/summary/报告/img/text/',
+    summary_dir='{workspace}/summary/报告/img/img-summary/'
 )
 ```
 
@@ -475,7 +474,7 @@ results = reader.process_batch(
 
 ## Step 5: 生成 manifest.json 和输出
 
-生成 `workspace/summary/manifest.json` 作为调度器读取处理结果的入口：
+生成 `{workspace}/summary/manifest.json` 作为调度器读取处理结果的入口：
 
 ```python
 import json
@@ -489,12 +488,12 @@ manifest = {
     "failed_count": sum(1 for d in documents if d["status"] == "failed"),
     "documents": documents,
     "has_combined_summary": len(documents) > 1,
-    "combined_summary_json": "workspace/summary/综合总结.json" if len(documents) > 1 else None,
-    "combined_summary_md": "workspace/summary/综合总结.md" if len(documents) > 1 else None,
+    "combined_summary_json": "{workspace}/summary/综合总结.json" if len(documents) > 1 else None,
+    "combined_summary_md": "{workspace}/summary/综合总结.md" if len(documents) > 1 else None,
     "generated_at": datetime.now().isoformat()
 }
 
-with open('workspace/summary/manifest.json', 'w', encoding='utf-8') as f:
+with open('{workspace}/summary/manifest.json', 'w', encoding='utf-8') as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
 ```
 

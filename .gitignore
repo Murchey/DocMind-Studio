@@ -190,6 +190,7 @@ Extension/out/
 *.vsix
 
 # Agent workspace (runtime outputs, not source code)
+WORKSPACE/
 ComponentAgents/*/workspace/input/
 ComponentAgents/*/workspace/converted/
 ComponentAgents/*/workspace/summary/
