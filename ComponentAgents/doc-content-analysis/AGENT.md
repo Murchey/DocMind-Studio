@@ -102,12 +102,13 @@ workspace/summary/
 }
 ```
 
-## summary.json 结构（单文档）
+## summary.json 结构（单文档索引）
 
-下游 Agent 可直接消费的结构化总结：
+下游 Agent（如 knowledge-builder）可直接消费的结构化索引：
 
 ```json
 {
+  "id": "doc_001",
   "title": "文档标题",
   "source_file": "report1.doc",
   "author": "作者",
@@ -115,36 +116,59 @@ workspace/summary/
   "paragraph_count": 50,
   "table_count": 3,
   "image_count": 5,
+  "language": "zh",
+  "generated_at": "2024-01-01T12:00:00",
+
   "summary": "一段话概括文档核心内容...",
+
+  "keywords": [
+    {"keyword": "关键词1", "frequency": 12, "relevance": 0.95},
+    {"keyword": "关键词2", "frequency": 8, "relevance": 0.87}
+  ],
+
   "sections": [
     {
       "heading": "章节/主题 1",
       "level": 2,
-      "key_points": ["要点1", "要点2"]
+      "paragraph_range": [1, 15],
+      "key_points": ["要点1", "要点2"],
+      "content_link": "workspace/summary/report1/text/content.json#/paragraphs/0-14"
     }
   ],
+
   "key_info": {
-    "data": ["关键数据/数字"],
-    "conclusions": ["核心观点"],
-    "references": ["重要引用或论据"]
+    "data": [{"value": "关键数据", "location": "paragraph_5"}],
+    "conclusions": [{"text": "核心观点", "location": "paragraph_12"}],
+    "references": [{"text": "重要引用", "location": "paragraph_20"}]
   },
+
   "tables": [
     {
+      "index": 0,
       "description": "表格内容简要描述",
       "rows": 5,
-      "columns": 4
+      "columns": 4,
+      "location": "paragraph_8",
+      "content_link": "workspace/summary/report1/text/content.json#/tables/0"
     }
   ],
+
   "images": [
     {
       "file": "image_1.png",
+      "path": "workspace/summary/report1/img/image_1.png",
       "description": "图片内容简要描述",
-      "has_text": true
+      "has_text": true,
+      "ocr_link": "workspace/summary/report1/img/text/image_1.txt",
+      "summary_link": "workspace/summary/report1/img/img-summary/image_1.md"
     }
   ],
-  "keywords": ["关键词1", "关键词2"],
-  "language": "zh",
-  "generated_at": "2024-01-01T12:00:00"
+
+  "content_links": {
+    "content_json": "workspace/summary/report1/text/content.json",
+    "summary_md": "workspace/summary/report1/text/summary.md",
+    "images_dir": "workspace/summary/report1/img/"
+  }
 }
 ```
 
@@ -332,50 +356,27 @@ result = converter.process_all('workspace/input/', 'workspace/')
 - 统计每个文档的内容提取和图片提取状态
 - 向用户报告处理结果
 
-## Step 4: AI 生成总结（AI 原生）
+## Step 4: AI 生成总结与索引（AI 原生）
 
 **执行方式：AI 原生（无需外部 API，无需 Python 脚本）**
 
-AI 助手读取每个文档的 `content.json`，为每个文档生成 **summary.json**（结构化）和 **summary.md**（可读）：
+AI 助手读取每个文档的 `content.json`，为每个文档生成 **summary.json**（结构化索引，供 knowledge-builder 消费）和 **summary.md**（可读）：
 
 ### 4a. 单文档总结
 
 读取 `workspace/summary/<文件名>/text/content.json`，生成：
-- `workspace/summary/<文件名>/text/summary.json`（结构化，供下游 Agent 消费）
+- `workspace/summary/<文件名>/text/summary.json`（结构化索引，供下游 Agent 消费）
 - `workspace/summary/<文件名>/text/summary.md`（人类可读）
 
-**summary.json 结构**：
-
-```json
-{
-  "title": "<文档标题>",
-  "source_file": "<原始文件名>",
-  "author": "<作者>",
-  "created_at": "<时间>",
-  "paragraph_count": 50,
-  "table_count": 3,
-  "image_count": 5,
-  "summary": "<一段话概括文档核心内容，200-300字>",
-  "sections": [
-    {"heading": "<章节/主题 1>", "level": 2, "key_points": ["要点1", "要点2"]},
-    {"heading": "<章节/主题 2>", "level": 2, "key_points": ["要点3"]}
-  ],
-  "key_info": {
-    "data": ["<关键数据/数字>"],
-    "conclusions": ["<核心观点>"],
-    "references": ["<重要引用或论据>"]
-  },
-  "tables": [
-    {"description": "<表格内容简要描述>", "rows": 5, "columns": 4}
-  ],
-  "images": [
-    {"file": "image_1.png", "description": "<图片内容简要描述>", "has_text": true}
-  ],
-  "keywords": ["关键词1", "关键词2"],
-  "language": "zh",
-  "generated_at": "YYYY-MM-DDTHH:MM:SS"
-}
-```
+**summary.json 为索引文件，必须包含**：
+- 文档元信息（id、title、source_file、author、language）
+- 文档摘要（summary）
+- 关键词列表（keywords），含词频和相关度
+- 章节结构（sections），含段落范围和 content_link
+- 关键信息（key_info），含位置标注
+- 表格索引（tables），含 content_link
+- 图片索引（images），含路径和 OCR/总结链接
+- 内容链接（content_links），指向 content.json、summary.md、images 目录
 
 **summary.md 结构**：
 
