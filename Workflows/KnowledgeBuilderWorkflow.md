@@ -379,6 +379,86 @@ knowledge-builder 开始
 
 ---
 
+## 需求传递流程
+
+当 doc-content-analysis 识别到需求类文档时，自动触发需求传递流程：
+
+### 需求识别
+
+doc-content-analysis 在 Step 4 识别文档类型：
+- **知识文档**：进入标准知识库构建流程
+- **需求文档**：进入需求传递流程
+
+### 需求文档处理
+
+```
+需求文档（排课要求、表格分析需求等）
+    │
+    ▼
+┌─────────────────────────────┐
+│  doc-content-analysis       │
+│  Step 4: 识别为需求文档      │
+│  输出：summary.json/md      │
+│    ├── document_type: "requirement"
+│    ├── requirement_type: "schedule" | "excel"
+│    └── target_agent: "schedule-agent" | "excel-master"
+└─────────────┬───────────────┘
+              │
+              ▼
+┌─────────────────────────────┐
+│  调度器读取 manifest.json    │
+│  识别需求类型和目标 Agent    │
+└─────────────┬───────────────┘
+              │
+              ├─── schedule-agent ───┐
+              │                      ▼
+              │    ┌─────────────────────────────┐
+              │    │  schedule-agent             │
+              │    │  input: summary.md          │
+              │    │  output: 课表 Excel         │
+              │    └─────────────────────────────┘
+              │
+              └─── excel-master ─────┐
+                                     ▼
+                   ┌─────────────────────────────┐
+                   │  excel-master               │
+                   │  input: summary.md          │
+                   │  output: 分析结果 Excel     │
+                   └─────────────────────────────┘
+```
+
+### 调度器职责
+
+1. 读取 `doc-content-analysis/workspace/summary/manifest.json`
+2. 检查每个文档的 `document_type` 字段
+3. 对于 `document_type: "requirement"` 的文档：
+   - 读取 `target_agent` 字段确定目标 Agent
+   - 将 `summary.md` 复制到目标 Agent 的 `input/` 目录
+   - 调用目标 Agent 执行任务
+
+### 需求传递示例
+
+```python
+# 调度器读取 manifest
+with open('doc-content-analysis/workspace/summary/manifest.json', 'r') as f:
+    manifest = json.load(f)
+
+for doc in manifest['documents']:
+    if doc.get('document_type') == 'requirement':
+        target_agent = doc.get('target_agent')
+        summary_md = doc['summary_md']
+        
+        # 复制到目标 Agent
+        if target_agent == 'schedule-agent':
+            shutil.copy(summary_md, 'schedule-agent/workspace/input/需求.md')
+            # 调用 schedule-agent
+        elif target_agent == 'excel-master':
+            shutil.copy(summary_md, 'excel-master/workspace/input/需求.md')
+            # 调用 excel-master
+```
+
+---
+
 ## 错误处理
 
 | 场景 | 处理方式 |
@@ -388,3 +468,5 @@ knowledge-builder 开始
 | manifest.json status=empty | 告知用户无文件可处理 |
 | 单文档 summary.json 缺失 | 跳过该文档，在 kb-manifest.json 中标记 |
 | 知识库目录已存在 | 清空后重新构建 |
+| 需求文档目标 Agent 不存在 | 记录警告，跳过该需求 |
+| 需求文档格式不规范 | 尝试解析，记录警告 |

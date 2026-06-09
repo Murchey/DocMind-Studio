@@ -24,7 +24,8 @@ DocMind-Studio/                        # 根目录
 │   ├── excel-master-main/
 │   ├── ppt-deep-summary-main/
 │   ├── phd-research-agent/
-│   └── ppt-master/
+│   ├── ppt-master/
+│   └── schedule-agent/
 ├── WORKSPACE/                         # 总工作区（根目录下）
 │   └── {ProjectName}/                 # 项目工作区（PascalCase，由 AGENTS.md 创建）
 │       ├── doc-content-analysis/      # Agent 工作目录
@@ -39,7 +40,8 @@ DocMind-Studio/                        # 根目录
 │       ├── excel-master/
 │       ├── ppt-deep-summary/
 │       ├── phd-research-agent/
-│       └── ppt-master/
+│       ├── ppt-master/
+│       └── schedule-agent/
 ```
 
 ### 命名规则
@@ -74,6 +76,7 @@ DocMind-Studio/                        # 根目录
 | ppt-deep-summary | `ComponentAgents/ppt-deep-summary-main/AGENT.md` | 可处理多 PPTX、PPT 文件的核心观点总结和内容梳理 |
 | phd-research-agent | `ComponentAgents/phd-research-agent/AGENT.md` | 博导论文辅助 Agent，可对论文核心内容进行修改建议 |
 | ppt-master | `ComponentAgents/ppt-master/AGENT.md` | 用于 PPT 生成的 Agent |
+| schedule-agent | `ComponentAgents/schedule-agent/AGENT.md` | 智能排课与日程安排：支持排课、会议安排、日程规划等多种场景，解析 MD 约束文档并生成优化方案 |
 
 ---
 

@@ -361,7 +361,21 @@ result = converter.process_all('{workspace}/input/', '{workspace}/')
 
 AI 助手读取每个文档的 `content.json`，为每个文档生成 **summary.json**（结构化索引，供 knowledge-builder 消费）和 **summary.md**（可读）：
 
-### 4a. 单文档总结
+### 4.1 文档类型识别
+
+在生成总结前，先识别文档类型：
+
+| 类型 | 特征 | 输出格式 | 下游 Agent |
+|------|------|----------|------------|
+| **知识文档** | 技术文档、研究报告、论文等 | 标准 summary.json/md | knowledge-builder |
+| **需求文档** | 排课要求、表格分析需求、任务描述等 | 需求 summary.json/md | schedule-agent, excel-master |
+
+**识别规则**：
+- 包含"排课"、"课程表"、"时间安排"、"会议安排"等关键词 → 排课需求
+- 包含"表格分析"、"数据对比"、"Excel处理"等关键词 → 表格需求
+- 包含"要求"、"需求"、"需要"、"请"等指令性词汇 → 需求文档
+
+### 4.2 知识文档总结（标准流程）
 
 读取 `{workspace}/summary/<文件名>/text/content.json`，生成：
 - `{workspace}/summary/<文件名>/text/summary.json`（结构化索引，供下游 Agent 消费）
@@ -369,6 +383,7 @@ AI 助手读取每个文档的 `content.json`，为每个文档生成 **summary.
 
 **summary.json 为索引文件，必须包含**：
 - 文档元信息（id、title、source_file、author、language）
+- 文档类型标记（document_type: "knowledge" | "requirement"）
 - 文档摘要（summary）
 - 关键词列表（keywords），含词频和相关度
 - 章节结构（sections），含段落范围和 content_link
@@ -377,12 +392,13 @@ AI 助手读取每个文档的 `content.json`，为每个文档生成 **summary.
 - 图片索引（images），含路径和 OCR/总结链接
 - 内容链接（content_links），指向 content.json、summary.md、images 目录
 
-**summary.md 结构**：
+**知识文档 summary.md 结构**：
 
 ```markdown
 # <文档标题>
 
 **来源文件**：`<原始文件名>`
+**文档类型**：知识文档
 **作者**：`<作者>`
 **创建时间**：`<时间>`
 **段落数**：`<数量>` | **表格数**：`<数量>` | **图片数**：`<数量>`
@@ -419,7 +435,131 @@ AI 助手读取每个文档的 `content.json`，为每个文档生成 **summary.
 *生成时间：YYYY-MM-DD HH:MM:SS*
 ```
 
-### 4b. 综合总结（多文档场景）
+### 4.3 需求文档总结（特殊流程）
+
+对于需求类文档，生成适配下游 Agent 的格式：
+
+**summary.json 增加字段**：
+
+```json
+{
+  "document_type": "requirement",
+  "requirement_type": "schedule | excel | general",
+  "target_agent": "schedule-agent | excel-master",
+  "requirements": {
+    "task_description": "任务描述",
+    "constraints": ["约束条件1", "约束条件2"],
+    "inputs": ["所需输入1", "所需输入2"],
+    "expected_output": "期望输出描述"
+  }
+}
+```
+
+**需求 summary.md 格式**：
+
+```markdown
+# <需求标题>
+
+**来源文件**：`<原始文件名>`
+**文档类型**：需求文档
+**需求类型**：排课需求 | 表格分析需求 | 通用需求
+**目标 Agent**：schedule-agent | excel-master
+
+---
+
+## 需求描述
+
+<用户的核心需求描述>
+
+## 约束条件
+
+- 约束1
+- 约束2
+
+## 输入信息
+
+<从文档中提取的输入数据，如教师列表、课程信息、表格数据等>
+
+## 期望输出
+
+<用户期望的输出格式和内容>
+
+---
+*生成时间：YYYY-MM-DD HH:MM:SS*
+```
+
+**排课需求特殊处理**：
+
+如果识别为排课需求，提取并格式化以下信息：
+- 教师信息（姓名、可用时间、偏好）
+- 课程信息（名称、课时、班级）
+- 教室信息（编号、容量、类型）
+- 约束条件（硬约束、软约束）
+
+**排课需求 summary.md 示例**：
+
+```markdown
+# 排课需求
+
+**来源文件**：`排课要求.docx`
+**文档类型**：需求文档
+**需求类型**：排课需求
+**目标 Agent**：schedule-agent
+
+---
+
+## 需求描述
+
+根据教师、课程、教室信息生成2024年秋季学期课程表。
+
+## 教师信息
+
+| 教师姓名 | 可用时间 | 偏好 | 备注 |
+|----------|----------|------|------|
+| 张老师 | 周一1-2节, 周三3-4节 | 上午优先 | 数学组 |
+| 李老师 | 周二全天, 周四1-4节 | 无 | 英语组 |
+
+## 课程信息
+
+| 课程名称 | 课时数 | 授课教师 | 班级 | 连排要求 |
+|----------|--------|----------|------|----------|
+| 高等数学 | 4 | 张老师 | 2024级1班 | 每次2节 |
+| 大学英语 | 2 | 李老师 | 2024级1班 | 无 |
+
+## 教室信息
+
+| 教室编号 | 容量 | 类型 | 可用时间 |
+|----------|------|------|----------|
+| A101 | 60 | 多媒体 | 全天 |
+| B201 | 40 | 实验室 | 周一至周五 |
+
+## 约束条件
+
+### 硬约束（必须满足）
+1. 同一教师同一时间不能上多门课
+2. 同一班级同一时间不能上多门课
+3. 课程必须在可用教室中进行
+
+### 软约束（尽量满足）
+1. 张老师 prefer 上午上课
+2. 数学课尽量安排在上午
+
+## 期望输出
+
+按班级分表的 Excel 课表，包含教师、教室、时间信息。
+
+---
+*生成时间：2026-06-09 12:00:00*
+```
+
+**表格需求特殊处理**：
+
+如果识别为表格分析需求，提取并格式化以下信息：
+- 数据来源（文件名、表格位置）
+- 分析目标（对比、汇总、图表等）
+- 输出格式要求
+
+### 4.4 综合总结（多文档场景）
 
 当用户提供多个文档时，额外生成：
 - `{workspace}/summary/综合总结.json`（结构化）
@@ -432,8 +572,8 @@ AI 助手读取每个文档的 `content.json`，为每个文档生成 **summary.
   "document_count": 3,
   "generated_at": "YYYY-MM-DDTHH:MM:SS",
   "documents": [
-    {"source_file": "file1.docx", "title": "标题1", "key_points": ["要点1"]},
-    {"source_file": "file2.pdf", "title": "标题2", "key_points": ["要点2"]}
+    {"source_file": "file1.docx", "title": "标题1", "document_type": "knowledge", "key_points": ["要点1"]},
+    {"source_file": "file2.pdf", "title": "标题2", "document_type": "requirement", "requirement_type": "schedule"}
   ],
   "overall_summary": "<所有文档的整体概括>",
   "cross_analysis": {
@@ -441,7 +581,12 @@ AI 助手读取每个文档的 `content.json`，为每个文档生成 **summary.
     "contradictions": ["矛盾之处"],
     "connections": ["关联"]
   },
-  "key_findings": ["重要发现1", "重要发现2"]
+  "key_findings": ["重要发现1", "重要发现2"],
+  "requirements_summary": {
+    "total_requirements": 1,
+    "requirement_types": ["schedule"],
+    "target_agents": ["schedule-agent"]
+  }
 }
 ```
 

@@ -151,8 +151,35 @@ output: <输出路径和格式说明>             # 调度器/下游 Agent 读�
 JSON 结构由各 Agent 自行定义，但必须遵循：
 - 包含 `source_file` 字段（可追溯）
 - 包含 `generated_at` 字段（时间戳）
+- 包含 `document_type` 字段（文档类型：`knowledge` | `requirement`）
 - 使用 UTF-8 编码
 - 使用 `indent=2` 格式化
+
+### 3.2.1 需求文档输出规范
+
+当文档被识别为需求类文档时，summary.json 必须包含：
+
+```json
+{
+  "document_type": "requirement",
+  "requirement_type": "schedule | excel | general",
+  "target_agent": "schedule-agent | excel-master",
+  "requirements": {
+    "task_description": "任务描述",
+    "constraints": ["约束条件1", "约束条件2"],
+    "inputs": ["所需输入1", "所需输入2"],
+    "expected_output": "期望输出描述"
+  }
+}
+```
+
+**需求类型映射**：
+
+| requirement_type | 目标 Agent | 场景 |
+|-----------------|------------|------|
+| `schedule` | schedule-agent | 排课、会议安排、日程规划 |
+| `excel` | excel-master | 表格分析、数据对比、图表生成 |
+| `general` | 根据内容判断 | 其他需求 |
 
 ### 3.3 输出目录结构规范
 
