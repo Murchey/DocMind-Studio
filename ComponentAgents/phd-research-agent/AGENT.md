@@ -1,0 +1,128 @@
+---
+name: phd-research-agent
+description: 科研辅助 Agent，提供 Idea 评估、Introduction 草稿、论文审阅等核心能力
+tools: [markdown]
+input: workspace/input/（用户输入的研究想法或论文草稿）
+output: workspace/summary/（结构化的评估报告或写作建议）
+---
+
+# PhD Research Agent
+
+## 多 Agent 集成契约
+
+### 调用接口
+调度器通过读取本 AGENT.md 并执行工作流来触发本 Agent。
+
+### 输入契约
+- 路径：`workspace/input/`
+- 格式：Markdown 或纯文本
+- 命名规范：`<task_type>.md`（如 `idea.md`, `draft.md`）
+
+### 输出契约
+- 路径：`workspace/summary/`
+- 格式：结构化 JSON + 可读 MD
+- manifest.json：处理清单
+- 核心输出：评估报告或写作建议
+
+## 工作区规则
+
+**工作区路径**：`phd-research-agent/workspace/`
+
+**约束**：
+- 工作区是 SKILL 输出的唯一存放位置
+- `input/` 只读
+- 每次任务开始时清空 `summary/` 目录
+
+## 执行流程
+
+### Step 1: 任务识别
+- **目的**：识别用户输入的任务类型
+- **判断逻辑**：
+  - 如果输入包含研究想法 → 使用 `idea-evaluator`
+  - 如果输入包含论文草稿且需要审阅 → 使用 `pre-submission-reviewer`
+  - 如果需要起草 Introduction → 使用 `intro-drafter`
+
+### Step 2: 调用对应 SKILL
+- **调用的 SKILL**：根据任务类型读取对应的 SKILL.MD
+- **代码示例**：
+  ```python
+  # 读取 SKILL 文件
+  with open(f"SKILLS/{skill_name}/SKILL.md", "r") as f:
+      skill_content = f.read()
+  
+  # 执行 SKILL 中定义的流程
+  result = execute_skill(skill_content, input_data)
+  ```
+
+### Step 3: 生成输出
+- **输出位置**：`workspace/summary/`
+- **输出内容**：
+  - `manifest.json`：处理清单
+  - `<task_type>_result.json`：结构化结果
+  - `<task_type>_result.md`：可读报告
+
+## 核心规则
+
+### 处理规则
+1. 严格按照 SKILL.MD 中定义的步骤执行
+2. 每个步骤完成后记录中间结果
+3. 遇到致命缺陷时短路返回
+
+### 输出规则
+1. JSON 格式使用 `indent=2` 格式化
+2. 包含 `source_file` 字段（可追溯）
+3. 包含 `generated_at` 字段（ISO 8601 时间戳）
+4. 使用 UTF-8 编码
+
+### 错误处理
+1. 输入文件不存在 → 返回 `status: "empty"`
+2. SKILL 执行失败 → 返回 `status: "failed"` + 错误信息
+3. 部分成功 → 返回 `status: "completed"` + 详细统计
+
+## 可用 SKILLS
+
+| SKILL | 功能 | 触发条件 |
+|-------|------|----------|
+| idea-evaluator | 评估研究想法 | 用户提出研究想法 |
+| intro-drafter | 起草 Introduction | 需要论文 Introduction |
+| pre-submission-reviewer | 论文审阅 | 提交前审阅 |
+
+## 输出示例
+
+### manifest.json
+```json
+{
+  "status": "completed",
+  "total_files": 1,
+  "success_count": 1,
+  "failed_count": 0,
+  "documents": [
+    {
+      "source_file": "idea.md",
+      "status": "success",
+      "output_dir": "workspace/summary/",
+      "result_json": "workspace/summary/idea_result.json",
+      "result_md": "workspace/summary/idea_result.md"
+    }
+  ],
+  "generated_at": "2026-06-09T12:00:00"
+}
+```
+
+### idea_result.json
+```json
+{
+  "source_file": "idea.md",
+  "verdict": "Accept with Revisions",
+  "scores": {
+    "higher": 4,
+    "faster": 3,
+    "stronger": 5,
+    "cheaper": 2,
+    "broader": 4
+  },
+  "fatal_flaws": [],
+  "suggestions": ["建议1", "建议2"],
+  "generated_at": "2026-06-09T12:00:00"
+}
+```

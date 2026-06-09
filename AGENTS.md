@@ -68,6 +68,7 @@ DocMind-Studio/                        # 根目录
 | doc-form-master | `ComponentAgents/doc-form-master-main/AGENT.md` | 文档格式转换与处理 |
 | excel-master | `ComponentAgents/excel-master-main/AGENT.md` | Excel 文件处理 |
 | ppt-deep-summary | `ComponentAgents/ppt-deep-summary-main/AGENT.md` | PPT 深度总结 |
+| phd-research-agent | `ComponentAgents/phd-research-agent/AGENT.md` | 科研辅助：Idea 评估、Introduction 草稿、论文审阅 |
 
 ---
 
