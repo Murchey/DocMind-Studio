@@ -125,6 +125,7 @@ WORKSPACE/{ProjectName}/phd-research-agent/
 ```json
 {
   "source_file": "idea.md",
+  "generated_at": "2026-06-09T12:00:00",
   "verdict": "Accept with Revisions",
   "scores": {
     "higher": 4,
@@ -134,7 +135,53 @@ WORKSPACE/{ProjectName}/phd-research-agent/
     "broader": 4
   },
   "fatal_flaws": [],
-  "suggestions": ["建议1", "建议2"],
-  "generated_at": "2026-06-09T12:00:00"
+  "suggestions": ["建议1", "建议2"]
+}
+```
+
+### intro_outline.json
+```json
+{
+  "source_file": "research_info.md",
+  "generated_at": "2026-06-09T12:00:00",
+  "paragraphs": [
+    {"purpose": "背景介绍", "content": "介绍研究领域的重要性和研究对象"},
+    {"purpose": "现有工作", "content": "总结现有方法及其局限性"},
+    {"purpose": "问题本质", "content": "明确核心问题和研究目标"},
+    {"purpose": "关键挑战", "content": "列出技术难点和挑战"},
+    {"purpose": "解决方案", "content": "概述方法和技术路线"},
+    {"purpose": "贡献总结", "content": "明确列出贡献点"}
+  ],
+  "contributions": ["贡献1", "贡献2"]
+}
+```
+
+### review_result.json
+```json
+{
+  "source_file": "draft.md",
+  "generated_at": "2026-06-09T12:00:00",
+  "issues": [
+    {
+      "severity": "MAJOR",
+      "category": "logic",
+      "location": "Section 3.2",
+      "description": "论证逻辑不完整",
+      "suggestion": "补充实验支持"
+    },
+    {
+      "severity": "MINOR",
+      "category": "grammar",
+      "location": "Abstract",
+      "description": "冠词使用错误",
+      "suggestion": "将 'a' 改为 'the'"
+    }
+  ],
+  "summary": {
+    "critical": 0,
+    "major": 1,
+    "minor": 1
+  },
+  "verdict": "Needs Revision"
 }
 ```

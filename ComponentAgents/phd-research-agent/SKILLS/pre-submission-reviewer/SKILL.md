@@ -22,12 +22,18 @@ tools: [markdown]
 ## 调用方式
 
 ```python
-def review_paper(draft_text: str) -> dict:
+def review_paper(draft_text: str, source_file: str = "draft.md") -> dict:
     """
     审阅论文草稿
     
+    Args:
+        draft_text: 论文草稿文本
+        source_file: 原始文件名（用于追溯）
+    
     Returns:
         {
+            "source_file": "draft.md",
+            "generated_at": "2026-06-09T12:00:00",
             "issues": [
                 {
                     "severity": "CRITICAL | MAJOR | MINOR",
@@ -87,6 +93,8 @@ def review_paper(draft_text: str) -> dict:
 
 ```json
 {
+  "source_file": "draft.md",
+  "generated_at": "2026-06-09T12:00:00",
   "issues": [
     {
       "severity": "MAJOR",

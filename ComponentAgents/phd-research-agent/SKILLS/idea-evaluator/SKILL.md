@@ -22,12 +22,18 @@ tools: [markdown]
 ## 调用方式
 
 ```python
-def evaluate_idea(idea_text: str) -> dict:
+def evaluate_idea(idea_text: str, source_file: str = "idea.md") -> dict:
     """
     评估研究想法
     
+    Args:
+        idea_text: 研究想法描述文本
+        source_file: 原始文件名（用于追溯）
+    
     Returns:
         {
+            "source_file": "idea.md",
+            "generated_at": "2026-06-09T12:00:00",
             "verdict": "Strong Accept | Accept with Revisions | Reject and Pivot",
             "scores": {
                 "higher": 1-5,  # 更高：提升性能/效果

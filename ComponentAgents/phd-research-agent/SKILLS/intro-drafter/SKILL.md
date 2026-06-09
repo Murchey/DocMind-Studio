@@ -22,7 +22,7 @@ tools: [markdown]
 ## 调用方式
 
 ```python
-def draft_intro(research_info: dict) -> dict:
+def draft_intro(research_info: dict, source_file: str = "research_info.md") -> dict:
     """
     起草 Introduction 大纲
     
@@ -34,9 +34,12 @@ def draft_intro(research_info: dict) -> dict:
             "challenges": ["挑战1", "挑战2"],
             "solution": "解决方案概述"
         }
+        source_file: 原始文件名（用于追溯）
     
     Returns:
         {
+            "source_file": "research_info.md",
+            "generated_at": "2026-06-09T12:00:00",
             "paragraphs": [
                 {"purpose": "段落目的", "content": "要点"},
                 ...
@@ -74,6 +77,8 @@ def draft_intro(research_info: dict) -> dict:
 
 ```json
 {
+  "source_file": "research_info.md",
+  "generated_at": "2026-06-09T12:00:00",
   "paragraphs": [
     {
       "purpose": "背景介绍",
