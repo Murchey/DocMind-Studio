@@ -1,7 +1,7 @@
 ---
 name: doc-content-analysis
 description: 文档内容读取与分析 Agent，支持多个 DOC/DOCX/PDF 文件的批量转换、内容提取、图片提取和智能总结。
-tools: [python]
+tools: [python]0
 input: {workspace}/input/（.doc/.docx/.pdf 文件，由调度器放置）
 output: {workspace}/summary/（结构化 JSON 总结 + MD 可读总结 + 提取的图片）
 ---

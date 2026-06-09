@@ -26,7 +26,7 @@ AI 助手，支持多个 `.pptx` 文件的深度解析、智能分析和报告�
 
 1. 将待处理 PPT 文件放入 `{workspace}/input/`
 2. 加载 AGENT.md 作为 Agent 配置
-3. 触发执行流程（Step 1 → Step 6）
+3. 触发执行流程（Step 1 → Step 7）
 
 ## 输入规则
 
@@ -268,12 +268,39 @@ for pptx_file in files:
     file_dir.mkdir(parents=True, exist_ok=True)
 ```
 
-## Step 3: PPTParser — 深度解析
+## Step 3: 深度解析 + 内容分析
 
-读取 `SKILLS/PPTParser/skill.md`，执行解析脚本：
+根据文件数量选择处理模式：
+
+### 批量模式（多文件，推荐）
+
+当 `{workspace}/input/` 中有多个 `.pptx` 文件时，读取 `SKILLS/PPTBatchProcess/skill.md`，执行批量处理脚本：
 
 ```bash
+python SKILLS/PPTBatchProcess/scripts/ppt_batch_process.py {workspace}/input/ -o {workspace}/output/
+```
+
+**PPTBatchProcess 内部执行**：
+1. 扫描输入目录下所有 `.pptx` 文件
+2. 为每个文件调用 PPTParser 进行解析 → 生成 `parsed.json` + `parsed.md`
+3. 为每个文件调用 PPTAnalyst 进行分析 → 生成 `outline.json`
+4. 生成 `batch_summary.json` 汇总结果
+
+**输出验证**：
+- 确认每个文件的 `parsed.json` 和 `outline.json` 生成成功
+- 检查 `batch_summary.json` 中的 `success_count` 和 `fail_count`
+- 如有失败文件，查看 `error` 字段了解原因
+
+### 单文件模式
+
+当 `{workspace}/input/` 中只有单个 `.pptx` 文件时，分别调用 PPTParser 和 PPTAnalyst：
+
+```bash
+# PPTParser — 深度解析
 python SKILLS/PPTParser/scripts/ppt_parser.py {workspace}/input/<文件名>.pptx {workspace}/output/<文件名>/parsed.json {workspace}/output/<文件名>/parsed.md
+
+# PPTAnalyst — 内容分析
+python SKILLS/PPTAnalyst/scripts/ppt_analyst.py {workspace}/output/<文件名>/parsed.json {workspace}/output/<文件名>/outline.json
 ```
 
 **提取内容**：
@@ -285,35 +312,23 @@ python SKILLS/PPTParser/scripts/ppt_parser.py {workspace}/input/<文件名>.pptx
 - 演讲备注
 - 原始 Markdown（每页独立）
 
-**异常处理**：
-- 文件不存在 → 提示并停止
-- 解析失败 → 记录在 `warnings` 中，不中断流程
-- 空内容页 → 自动跳过
-
-**输出验证**：
-- 确认 `parsed.json` 生成成功
-- 检查 `warnings` 数组，非空时告知用户
-- 验证 `slide_count` 与实际页数一致
-
-## Step 4: PPTAnalyst — 内容分析
-
-读取 `SKILLS/PPTAnalyst/skill.md`，执行分析脚本：
-
-```bash
-python SKILLS/PPTAnalyst/scripts/ppt_analyst.py {workspace}/output/<文件名>/parsed.json {workspace}/output/<文件名>/outline.json
-```
-
 **分析能力**：
 - 语义分析：识别核心主题和关键主题
 - 大纲构建：自动分节，提取关键要点
 - 洞察分析：识别内容亮点、信息缺口、改进建议
 - 置信度标注：high/medium/low
 
-**输出验证**：
-- 确认 `outline.json` 生成成功
-- 检查 `metadata.requires_user_review` 为 `true`
+**异常处理**：
+- 文件不存在 → 提示并停止
+- 解析失败 → 记录在 `warnings` 中，不中断流程
+- 空内容页 → 自动跳过
 
-## Step 5: PPTIntelligent — 智能深度分析（AI 原生）
+**输出验证**：
+- 确认 `parsed.json` 和 `outline.json` 生成成功
+- 检查 `warnings` 数组，非空时告知用户
+- 验证 `slide_count` 与实际页数一致
+
+## Step 4: PPTIntelligent — 智能深度分析（AI 原生）
 
 读取 `SKILLS/PPTIntelligent/skill.md`，AI 助手直接执行智能分析：
 
@@ -336,7 +351,7 @@ python SKILLS/PPTAnalyst/scripts/ppt_analyst.py {workspace}/output/<文件名>/p
 - `parsed.json` 不存在 → 提示用户先执行 PPTParser
 - 内容过多（>50页）→ 优先分析前30页和末尾5页
 
-## Step 6: PPTFormatting — 排版输出
+## Step 5: PPTFormatting — 排版输出
 
 读取 `SKILLS/PPTFormatting/skill.md`，执行排版脚本：
 
@@ -364,13 +379,13 @@ python SKILLS/PPTFormatting/scripts/ppt_formatting.py {workspace}/output/<文件
 - 每个结论标注 `(Source: Slide X)`
 - 低置信度要点标注 `[待确认]`
 
-## Step 7: 生成综合总结（多文件场景）
+## Step 6: 生成综合总结（多文件场景）
 
 当处理多个 PPT 文件时，额外生成：
 - `{workspace}/output/综合总结.json`（结构化）
 - `{workspace}/output/综合总结.md`（人类可读）
 
-## Step 8: 生成 manifest.json
+## Step 7: 生成 manifest.json
 
 生成 `{workspace}/output/manifest.json` 作为调度器读取处理结果的入口：
 
