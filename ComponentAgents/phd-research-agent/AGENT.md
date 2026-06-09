@@ -2,8 +2,8 @@
 name: phd-research-agent
 description: 科研辅助 Agent，提供 Idea 评估、Introduction 草稿、论文审阅等核心能力
 tools: [markdown]
-input: workspace/input/（用户输入的研究想法或论文草稿）
-output: workspace/summary/（结构化的评估报告或写作建议）
+input: WORKSPACE/{ProjectName}/phd-research-agent/input/（调度器放置的研究想法或论文草稿）
+output: WORKSPACE/{ProjectName}/phd-research-agent/summary/（结构化的评估报告或写作建议）
 ---
 
 # PhD Research Agent
@@ -11,26 +11,36 @@ output: workspace/summary/（结构化的评估报告或写作建议）
 ## 多 Agent 集成契约
 
 ### 调用接口
-调度器通过读取本 AGENT.md 并执行工作流来触发本 Agent。
+调度器通过读取本 AGENT.md 并执行工作流来触发本 Agent。调度器负责创建工作区并将工作区路径传入。
 
 ### 输入契约
-- 路径：`workspace/input/`
+- 路径：`{workspace}/input/`（调度器传入的工作区路径下）
 - 格式：Markdown 或纯文本
 - 命名规范：`<task_type>.md`（如 `idea.md`, `draft.md`）
 
 ### 输出契约
-- 路径：`workspace/summary/`
+- 路径：`{workspace}/summary/`
 - 格式：结构化 JSON + 可读 MD
 - manifest.json：处理清单
 - 核心输出：评估报告或写作建议
 
 ## 工作区规则
 
-**工作区路径**：`phd-research-agent/workspace/`
+**工作区路径**：由调度器创建并传入，位于 `WORKSPACE/{ProjectName}/phd-research-agent/`
+
+**目录结构**：
+```
+WORKSPACE/{ProjectName}/phd-research-agent/
+├── input/                  # 输入（只读，调度器放置）
+└── summary/                # 最终输出
+    ├── manifest.json       # 处理清单
+    ├── <task_type>_result.json
+    └── <task_type>_result.md
+```
 
 **约束**：
 - 工作区是 SKILL 输出的唯一存放位置
-- `input/` 只读
+- `input/` 只读，Agent 不修改
 - 每次任务开始时清空 `summary/` 目录
 
 ## 执行流程
@@ -55,7 +65,7 @@ output: workspace/summary/（结构化的评估报告或写作建议）
   ```
 
 ### Step 3: 生成输出
-- **输出位置**：`workspace/summary/`
+- **输出位置**：`{workspace}/summary/`（调度器传入的工作区路径下）
 - **输出内容**：
   - `manifest.json`：处理清单
   - `<task_type>_result.json`：结构化结果
@@ -89,6 +99,8 @@ output: workspace/summary/（结构化的评估报告或写作建议）
 
 ## 输出示例
 
+> 以下路径中 `{workspace}` 表示调度器传入的工作区绝对路径，如 `WORKSPACE/ChlorphenaminePaper/phd-research-agent/`
+
 ### manifest.json
 ```json
 {
@@ -100,9 +112,9 @@ output: workspace/summary/（结构化的评估报告或写作建议）
     {
       "source_file": "idea.md",
       "status": "success",
-      "output_dir": "workspace/summary/",
-      "result_json": "workspace/summary/idea_result.json",
-      "result_md": "workspace/summary/idea_result.md"
+      "output_dir": "{workspace}/summary/",
+      "result_json": "{workspace}/summary/idea_result.json",
+      "result_md": "{workspace}/summary/idea_result.md"
     }
   ],
   "generated_at": "2026-06-09T12:00:00"
