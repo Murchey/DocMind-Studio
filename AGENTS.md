@@ -1,4 +1,4 @@
-﻿# 此文件用于调度所有的 AGENT
+﻿﻿﻿﻿﻿﻿﻿﻿# 此文件用于调度所有的 AGENT
 
 AGENTS 相当于 AGENT 能力的目录和工作方案的生成原则
 AGENT 相当于 SKILL 的能力目录
@@ -25,6 +25,7 @@ DocMind-Studio/                        # 根目录
 │   ├── ppt-deep-summary-main/
 │   ├── phd-research-agent/
 │   ├── ppt-master/
+│   ├── ppt-continuation-tool/
 │   └── schedule-agent/
 ├── WORKSPACE/                         # 总工作区（根目录下）
 │   └── {ProjectName}/                 # 项目工作区（PascalCase，由 AGENTS.md 创建）
@@ -41,6 +42,7 @@ DocMind-Studio/                        # 根目录
 │       ├── ppt-deep-summary/
 │       ├── phd-research-agent/
 │       ├── ppt-master/
+│       ├── ppt-continuation-tool/
 │       └── schedule-agent/
 ```
 
@@ -76,6 +78,7 @@ DocMind-Studio/                        # 根目录
 | ppt-deep-summary | `ComponentAgents/ppt-deep-summary-main/AGENT.md` | 可处理多 PPTX、PPT 文件的核心观点总结和内容梳理 |
 | phd-research-agent | `ComponentAgents/phd-research-agent/AGENT.md` | 博导论文辅助 Agent，可对论文核心内容进行修改建议 |
 | ppt-master | `ComponentAgents/ppt-master/AGENT.md` | 用于 PPT 生成的 Agent |
+| ppt-continuation-tool | `ComponentAgents/ppt-continuation-tool/AGENT.md` | 接收外部半完成 PPTX 和相关 DOCX 资料，分析已完成内容，继续生成剩余页面并输出完整 PPTX |
 | schedule-agent | `ComponentAgents/schedule-agent/AGENT.md` | 智能排课与日程安排：支持排课、会议安排、日程规划等多种场景，解析 MD 约束文档并生成优化方案 |
 
 ---
@@ -181,6 +184,41 @@ shutil.copy("用户文档路径", agent_ws / "input" / "input.docx")
 用户文档 → EnterpriseDocsWorkflow
   Step 0: 创建 WORKSPACE/{ProjectName}/
   输出：WORKSPACE/{ProjectName}/doc-form-master/output/
+```
+
+### 5. PPT 续写
+
+当用户需要继续完成外部半完成的 PPT 时：
+
+```
+用户文档 → ppt-continuation-tool
+  Step 0: 创建 WORKSPACE/{ProjectName}/ppt-continuation-tool/
+  输入：外部半完成 .pptx + .docx 资料
+  输出：WORKSPACE/{ProjectName}/ppt-continuation-tool/output/
+```
+
+**触发关键词**：继续完成 PPT、PPT 续写、补充 PPT、完成演示文稿、半完成 PPT
+
+**调度代码示例**：
+```python
+def execute_ppt_continuation(project_name: str, pptx_file: str, docx_files: list):
+    """执行 ppt-continuation-tool Agent"""
+    workspace = Path(f"WORKSPACE/{project_name}/ppt-continuation-tool")
+    workspace.mkdir(parents=True, exist_ok=True)
+    
+    # 创建输入目录
+    input_dir = workspace / "input"
+    input_dir.mkdir(exist_ok=True)
+    
+    # 复制输入文件
+    shutil.copy(pptx_file, input_dir)
+    for file in docx_files:
+        shutil.copy(file, input_dir)
+    
+    # 读取 AGENT.md 作为执行配置
+    agent_md = Path("ComponentAgents/ppt-continuation-tool/AGENT.md")
+    # 按照 AGENT.md 中的流程执行
+    # ...
 ```
 
 ---
