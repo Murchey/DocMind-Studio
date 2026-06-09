@@ -1,4 +1,4 @@
-# 此文件用于调度所有的 AGENT
+﻿# 此文件用于调度所有的 AGENT
 
 AGENTS 相当于 AGENT 能力的目录和工作方案的生成原则
 AGENT 相当于 SKILL 的能力目录
@@ -185,6 +185,171 @@ shutil.copy("用户文档路径", agent_ws / "input" / "input.docx")
 
 ---
 
+---
+
+## Agent 间衔接规范
+
+### 1. 状态检查机制
+
+调度器通过检查 `manifest.json` 判断 Agent 执行状态：
+
+```python
+import json
+from pathlib import Path
+
+def check_agent_status(workspace_path: str) -> dict:
+    """检查 Agent 执行状态"""
+    manifest_path = Path(workspace_path) / "summary" / "manifest.json"
+    
+    if not manifest_path.exists():
+        return {"status": "not_started"}
+    
+    with open(manifest_path, 'r', encoding='utf-8') as f:
+        manifest = json.load(f)
+    
+    return {
+        "status": manifest.get("status", "unknown"),
+        "success_count": manifest.get("success_count", 0),
+        "failed_count": manifest.get("failed_count", 0),
+        "documents": manifest.get("documents", [])
+    }
+```
+
+### 2. 数据传递流程
+
+```
+上游 Agent 完成
+    
+    
+生成 manifest.json (status=completed)
+    
+    
+调度器读取 manifest.json
+    
+    
+复制 summary.md 到下游 Agent 的 input/
+    
+    
+调用下游 Agent
+```
+
+**传递代码示例**：
+
+```python
+import shutil
+import json
+
+def pass_output_to_downstream(project_name: str, upstream_agent: str, downstream_agent: str):
+    """将上游输出传递给下游 Agent"""
+    upstream_summary = Path(f"WORKSPACE/{project_name}/{upstream_agent}/summary")
+    downstream_input = Path(f"WORKSPACE/{project_name}/{downstream_agent}/input")
+    downstream_input.mkdir(parents=True, exist_ok=True)
+    
+    manifest_path = upstream_summary / "manifest.json"
+    with open(manifest_path, 'r', encoding='utf-8') as f:
+        manifest = json.load(f)
+    
+    for doc in manifest.get("documents", []):
+        if doc.get("status") == "success":
+            summary_md = doc.get("summary_md")
+            if summary_md and Path(summary_md).exists():
+                dest = downstream_input / f"{Path(summary_md).stem}.md"
+                shutil.copy(summary_md, dest)
+```
+
+### 3. 需求文档传递
+
+当 doc-content-analysis 识别到需求文档时，调度器自动传递到目标 Agent：
+
+```python
+def pass_requirements(project_name: str):
+    """传递需求文档到目标 Agent"""
+    manifest_path = Path(f"WORKSPACE/{project_name}/doc-content-analysis/summary/manifest.json")
+    
+    with open(manifest_path, 'r', encoding='utf-8') as f:
+        manifest = json.load(f)
+    
+    for doc in manifest.get("documents", []):
+        if doc.get("document_type") == "requirement":
+            target_agent = doc.get("target_agent")
+            summary_md = doc.get("summary_md")
+            
+            if target_agent and summary_md:
+                dest = Path(f"WORKSPACE/{project_name}/{target_agent}/input/需求.md")
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy(summary_md, dest)
+```
+
+### 4. 错误处理
+
+| 场景 | 处理方式 |
+|------|----------|
+| manifest.json 不存在 | Agent 未执行，提示用户先执行上游 |
+| status = "failed" | 读取 error 字段，决定跳过或终止 |
+| status = "empty" | 无文件可处理，跳过下游 |
+| status = "partial" | 部分成功，传递成功的文件 |
+
+---
+
+## ppt-master-main 整合说明
+
+ppt-master-main 是独立的多角色协作系统，整合时需注意：
+
+### 目录结构
+
+```
+ComponentAgents/ppt-master-main/
+ AGENTS.md                  # 原始入口（保留）
+ SKILLS/ppt-master/         # 主 Skill
+    SKILL.MD              # 工作流定义
+    scripts/              # 脚本
+    templates/            # 模板
+    workflows/            # 子工作流
+    references/           # 参考文档
+ requirements.txt
+```
+
+### 调度方式
+
+调度 ppt-master 时，读取其 `SKILLS/ppt-master/SKILL.MD` 作为执行配置：
+
+```python
+def execute_ppt_master(project_name: str, input_files: list):
+    """执行 ppt-master Agent"""
+    workspace = Path(f"WORKSPACE/{project_name}/ppt-master")
+    workspace.mkdir(parents=True, exist_ok=True)
+    
+    # 创建输入目录
+    input_dir = workspace / "input"
+    input_dir.mkdir(exist_ok=True)
+    
+    # 复制输入文件
+    for file in input_files:
+        shutil.copy(file, input_dir)
+    
+    # 读取 SKILL.MD 作为执行配置
+    skill_md = Path("ComponentAgents/ppt-master-main/SKILLS/ppt-master/SKILL.MD")
+    # 按照 SKILL.MD 中的流程执行
+    # ...
+```
+
+### 输出处理
+
+ppt-master 的输出在 `WORKSPACE/{ProjectName}/ppt-master/projects/<name>/exports/`，调度器将其复制到 `output/`：
+
+```python
+def collect_ppt_master_output(project_name: str):
+    """收集 ppt-master 输出"""
+    exports_dir = Path(f"WORKSPACE/{project_name}/ppt-master/projects/*/exports")
+    output_dir = Path(f"WORKSPACE/{project_name}/ppt-master/output")
+    output_dir.mkdir(exist_ok=True)
+    
+    for pptx in exports_dir.glob("*.pptx"):
+        shutil.copy(pptx, output_dir)
+```
+
+---
+
 ## 使用方式
 
 1. 用户描述需求
@@ -194,8 +359,8 @@ shutil.copy("用户文档路径", agent_ws / "input" / "input.docx")
 5. 复制用户文档到 Agent 的 `input/`
 6. 调用 AGENT，传入工作区路径
 7. AGENT 加载 SKILL 执行具体任务
-8. **每个步骤完成后更新进度**（tracker.update_progress / tracker.complete_step）
-9. 输出结果写入工作区，返回给用户或传递给下游 AGENT
+8. **检查 Agent 状态**（check_agent_status）
+9. **传递输出到下游**（pass_output_to_downstream）
 10. **任务完成时标记完成**（tracker.complete_task）
 
 ### 进度更新示例
@@ -209,6 +374,12 @@ tracker.update_progress(task_id=task_id, step_id="content-extraction", progress=
 
 # 步骤完成
 tracker.complete_step(task_id=task_id, step_id="content-extraction", message="文档内容提取完成")
+
+# 检查状态
+status = check_agent_status(f"WORKSPACE/{project_name}/doc-content-analysis")
+if status["status"] == "completed":
+    # 传递到下游
+    pass_output_to_downstream(project_name, "doc-content-analysis", "knowledge-builder")
 
 # 任务完成
 tracker.complete_task(task_id=task_id, message="所有任务完成")

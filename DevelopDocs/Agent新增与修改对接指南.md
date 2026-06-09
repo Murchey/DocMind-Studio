@@ -461,7 +461,137 @@ pandas>=1.3.0
 
 ---
 
-## 七、文档更新检查表
+## 七、解决 Agent 执行被打断的问题
+
+### 7.1 问题分析
+
+| 问题 | 原因 | 影响 |
+|------|------|------|
+| 多步骤切换 | 每个 Step 需要 AI 读取 SKILL.MD 再执行 | 上下文切换频繁 |
+| AI 原生步骤 | 如 doc-content-analysis Step 4（AI 总结） | 大文档处理时耗时长 |
+| 步骤过于分散 | 脚本步骤和 AI 步骤交替执行 | 执行效率低 |
+
+### 7.2 解决方案：优化 AGENT.md 设计
+
+**核心原则**：将脚本步骤合并执行，减少 AI 介入次数。
+
+#### 设计模式 1：脚本步骤合并
+
+**反面示例**（容易被打断）：
+```markdown
+## 执行流程
+### Step 1: 格式转换
+- 调用 doc-convertor 的 convert()
+
+### Step 2: 内容提取
+- 调用 doc-convertor 的 extract_text()
+
+### Step 3: 图片提取
+- 调用 doc-convertor 的 extract_images()
+```
+
+**正面示例**（一次性执行）：
+```markdown
+## 执行流程
+### Step 1: 格式转换 + 内容提取 + 图片提取
+- 调用 doc-convertor 的 process_all() 一键完成
+- 代码示例：
+  ```python
+  converter.process_all('{workspace}/input/', '{workspace}/')
+  ```
+
+### Step 2: AI 总结（需要 AI 介入）
+- 读取 content.json，生成 summary.json/md
+```
+
+#### 设计模式 2：脚本优先，AI 集中
+
+```markdown
+## 执行流程
+
+### Step 1: 数据处理（脚本批量执行）
+调用所有脚本型 SKILL，一次性完成数据处理：
+```python
+# 1. 格式转换
+converter.process_all('{workspace}/input/', '{workspace}/')
+
+# 2. 图片 OCR
+reader.process_batch('{workspace}/summary/*/img/')
+```
+
+### Step 2: AI 分析（集中处理）
+AI 读取所有处理结果，进行分析和总结
+```
+
+#### 设计模式 3：使用复合脚本
+
+为 Agent 创建一个复合脚本，将多个 SKILL 脚本串联执行：
+
+```python
+# scripts/run_all.py
+from doc_converter import DocConverter
+from img_reader import ImgReader
+
+def run_all(input_dir, output_dir):
+    # 1. 格式转换 + 内容提取
+    converter = DocConverter()
+    converter.process_all(input_dir, output_dir)
+    
+    # 2. 图片 OCR
+    reader = ImgReader()
+    reader.process_batch(f'{output_dir}/summary/*/img/')
+    
+    return {"status": "completed"}
+```
+
+### 7.3 AGENT.md 设计规范
+
+| 规范 | 说明 |
+|------|------|
+| 脚本步骤合并 | 多个脚本步骤合并为一个 Step |
+| 脚本优先执行 | 脚本步骤放在前面，AI 步骤放在后面 |
+| 提供复合脚本 | 为复杂流程创建一键执行脚本 |
+| 减少 AI 等待 | 脚本执行期间不需要 AI 介入 |
+
+### 7.4 使用进度追踪器同步状态
+
+执行过程中使用 `process-skill` 同步进度到 VS Code 插件：
+
+```python
+import sys
+sys.path.insert(0, 'ComponentAgents/process-skill/scripts')
+from progress_tracker import ProgressTracker
+
+tracker = ProgressTracker()
+
+# 创建任务
+task_id = tracker.create_task(
+    project="MyProject",
+    workflow="KnowledgeBuilderWorkflow",
+    agent="doc-content-analysis",
+    steps=[
+        {"id": "step1", "name": "数据处理", "agent": "doc-content-analysis"},
+        {"id": "step2", "name": "AI分析", "agent": "doc-content-analysis"},
+    ]
+)
+
+# 执行脚本步骤
+tracker.update_progress(task_id, "step1", progress=50, message="正在处理...")
+converter.process_all(input_dir, output_dir)
+tracker.complete_step(task_id, "step1", message="数据处理完成")
+
+# 执行 AI 步骤
+tracker.update_progress(task_id, "step2", progress=0, message="AI 分析中...")
+# ... AI 处理 ...
+tracker.complete_step(task_id, "step2", message="AI 分析完成")
+
+# 完成任务
+tracker.complete_task(task_id, message="任务完成")
+```
+
+---
+
+## 八、文档更新检查表
 
 修改 Agent 后，检查以下文档是否需要更新：
 

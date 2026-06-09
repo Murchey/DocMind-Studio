@@ -1,228 +1,127 @@
 ---
-name: progress-tracker
-description: 任务进度追踪与通知，支持实时写入进度 JSON 文件，供 VS Code 插件展示任务状态。
+name: process-skill
+description: 同步插件进度的 Skill，用于实时写入进度文件供 VS Code 插件展示
 tools: [python]
 ---
 
-# Progress Tracker
+# Process Skill
 
-任务进度追踪与通知 Skill。在 AGENTS 执行任务时持续写入进度 JSON 文件，供 VS Code 插件自动检测并在 Dashboard 中展示任务进度。
+同步插件进度的 Skill，实现 DocMind 进度通知 JSON 对接规范，支持实时写入进度文件供 VS Code 插件展示。
 
-**核心原则**：原子写入、完整状态快照、兼容规范 Schema。
+## 功能说明
 
-**工作区约定**：进度文件默认写入 `WORKSPACE/.docmind-progress.json`，支持自定义路径。
+- 创建任务并初始化进度
+- 更新步骤进度
+- 标记步骤/任务完成
+- 添加输出产物
+- 标记任务失败/取消
 
----
+## 输入/输出
 
-# 功能概览
+**输入**：
+- 任务信息（项目名、工作流、Agent、步骤列表）
 
-```
-Agent 执行任务
-    ↓
-ProgressTracker.update()  ←  实时更新进度
-    ↓
-写入 .docmind-progress.json（原子写入）
-    ↓
-VS Code 插件检测文件变化
-    ↓
-Dashboard 展示任务进度
-```
+**输出**：
+- `WORKSPACE/.docmind-progress.json`：进度文件（供 VS Code 插件读取）
 
----
-
-# 调用方式
-
-## 初始化
+## 调用方式
 
 ```python
 import sys
 sys.path.insert(0, 'ComponentAgents/process-skill/scripts')
 from progress_tracker import ProgressTracker
 
-# 使用默认路径（WORKSPACE/.docmind-progress.json）
+# 初始化
 tracker = ProgressTracker()
 
-# 自定义路径
-tracker = ProgressTracker(progress_file='WORKSPACE/MyProject/progress.json')
-```
-
-## 创建任务
-
-```python
-# 创建新任务，返回 task_id
+# 创建任务
 task_id = tracker.create_task(
-    project="ChlorphenaminePaper",
+    project="ProjectName",
     workflow="KnowledgeBuilderWorkflow",
     agent="doc-content-analysis",
     steps=[
-        {"id": "workspace-init", "name": "创建项目工作区", "agent": "AGENTS.md"},
-        {"id": "content-extraction", "name": "文档内容提取", "agent": "doc-content-analysis"},
-        {"id": "knowledge-build", "name": "知识库构建", "agent": "knowledge-builder"},
+        {"id": "step1", "name": "格式转换", "agent": "doc-content-analysis"},
+        {"id": "step2", "name": "内容提取", "agent": "doc-content-analysis"},
+        {"id": "step3", "name": "AI总结", "agent": "doc-content-analysis"},
     ]
 )
-```
 
-## 更新进度
+# 更新进度
+tracker.update_progress(task_id, step_id="step1", progress=50, message="正在转换...")
 
-```python
-# 更新当前步骤进度
-tracker.update_progress(
-    task_id=task_id,
-    step_id="content-extraction",
-    progress=55,
-    message="正在处理 氯苯那敏论文.docx"
-)
+# 完成步骤
+tracker.complete_step(task_id, "step1", message="格式转换完成")
 
-# 更新总进度
-tracker.update_progress(
-    task_id=task_id,
-    progress=42,
-    message="正在提取文档正文与图片"
-)
-```
-
-## 完成步骤
-
-```python
-# 标记步骤完成
-tracker.complete_step(
-    task_id=task_id,
-    step_id="content-extraction",
-    message="文档内容提取完成"
-)
-```
-
-## 添加产物
-
-```python
 # 添加输出产物
-tracker.add_output(
-    task_id=task_id,
-    label="内容摘要",
-    path="WORKSPACE/ChlorphenaminePaper/doc-content-analysis/summary/综合总结.json",
-    kind="json"
-)
+tracker.add_output(task_id, label="转换结果", path="workspace/converted/", kind="file")
+
+# 完成任务
+tracker.complete_task(task_id, message="所有任务完成")
 ```
 
-## 任务完成
-
-```python
-# 标记任务完成
-tracker.complete_task(task_id, message="知识库构建完成")
-```
-
-## 任务失败
-
-```python
-# 标记任务失败
-tracker.fail_task(task_id, error="Conversion failed: Word not installed")
-```
-
----
-
-# 命令行调用
+## 命令行调用
 
 ```bash
 # 创建任务
-python ComponentAgents/process-skill/scripts/progress_tracker.py create \
-  --project "ChlorphenaminePaper" \
-  --workflow "KnowledgeBuilderWorkflow" \
-  --agent "doc-content-analysis" \
-  --steps '[{"id":"step1","name":"步骤1","agent":"agent1"}]'
+python scripts/progress_tracker.py create --project "MyProject" --workflow "KnowledgeBuilder" --agent "doc-content-analysis" --steps '[{"id":"step1","name":"格式转换"}]'
 
 # 更新进度
-python ComponentAgents/process-skill/scripts/progress_tracker.py update \
-  --task-id <task_id> \
-  --step-id "step1" \
-  --progress 50 \
-  --message "处理中"
+python scripts/progress_tracker.py update --task-id <task_id> --step-id step1 --progress 50 --message "正在转换..."
+
+# 完成步骤
+python scripts/progress_tracker.py complete-step --task-id <task_id> --step-id step1 --message "完成"
 
 # 完成任务
-python ComponentAgents/process-skill/scripts/progress_tracker.py complete \
-  --task-id <task_id>
-
-# 失败任务
-python ComponentAgents/process-skill/scripts/progress_tracker.py fail \
-  --task-id <task_id> \
-  --error "错误信息"
+python scripts/progress_tracker.py complete --task-id <task_id> --message "任务完成"
 ```
 
----
+## 方法参考
 
-# Schema 规范
+| 方法 | 说明 |
+|------|------|
+| `create_task()` | 创建新任务，返回 task_id |
+| `update_progress()` | 更新步骤进度 |
+| `complete_step()` | 标记步骤完成 |
+| `complete_task()` | 标记任务完成 |
+| `add_output()` | 添加输出产物 |
+| `fail_task()` | 标记任务失败 |
+| `cancel_task()` | 取消任务 |
 
-进度 JSON 文件遵循 `DocMind进度通知JSON对接规范.md`：
+## 进度文件结构
 
 ```json
 {
   "version": "1.0",
-  "project": "ChlorphenaminePaper",
+  "project": "ProjectName",
   "workflow": "KnowledgeBuilderWorkflow",
   "agent": "doc-content-analysis",
   "status": "running",
-  "phase": "extracting",
-  "message": "正在提取文档正文与图片",
-  "progress": 42,
-  "started_at": "2026-06-07T20:40:00+08:00",
-  "updated_at": "2026-06-07T20:42:12+08:00",
-  "current_step": "content-extraction",
-  "steps": [...],
-  "outputs": [...]
+  "phase": "content-extraction",
+  "message": "正在提取文档内容...",
+  "progress": 45,
+  "started_at": "2026-06-09T12:00:00+08:00",
+  "updated_at": "2026-06-09T12:05:00+08:00",
+  "current_step": "step2",
+  "steps": [
+    {
+      "id": "step1",
+      "name": "格式转换",
+      "agent": "doc-content-analysis",
+      "status": "completed",
+      "progress": 100,
+      "message": "格式转换完成"
+    },
+    {
+      "id": "step2",
+      "name": "内容提取",
+      "agent": "doc-content-analysis",
+      "status": "running",
+      "progress": 45,
+      "message": "正在提取文档内容..."
+    }
+  ],
+  "outputs": [
+    {"label": "转换结果", "path": "workspace/converted/", "kind": "file"}
+  ]
 }
-```
-
-## 状态值
-
-- `idle` - 空闲
-- `pending` - 等待中
-- `running` - 运行中
-- `completed` - 已完成
-- `failed` - 失败
-- `cancelled` - 已取消
-
----
-
-# 集成示例
-
-在 AGENT 中使用：
-
-```python
-from progress_tracker import ProgressTracker
-
-class MyAgent:
-    def __init__(self, workspace_path):
-        self.tracker = ProgressTracker(progress_file=f"{workspace_path}/../.docmind-progress.json")
-        self.task_id = None
-
-    def run(self, files):
-        # 创建任务
-        self.task_id = self.tracker.create_task(
-            project="MyProject",
-            workflow="MyWorkflow",
-            agent="my-agent",
-            steps=[
-                {"id": "step1", "name": "步骤1", "agent": "my-agent"},
-                {"id": "step2", "name": "步骤2", "agent": "my-agent"},
-            ]
-        )
-
-        try:
-            # 执行步骤1
-            self.tracker.update_progress(self.task_id, "step1", 0, "开始处理")
-            # ... 执行任务 ...
-            self.tracker.update_progress(self.task_id, "step1", 50, "处理中")
-            # ... 继续处理 ...
-            self.tracker.complete_step(self.task_id, "step1", "步骤1完成")
-
-            # 执行步骤2
-            self.tracker.update_progress(self.task_id, "step2", 0, "开始步骤2")
-            # ... 执行任务 ...
-            self.tracker.add_output(self.task_id, "结果文件", "path/to/output.json", "json")
-            self.tracker.complete_step(self.task_id, "step2", "步骤2完成")
-
-            # 完成任务
-            self.tracker.complete_task(self.task_id, "任务完成")
-        except Exception as e:
-            self.tracker.fail_task(self.task_id, str(e))
-            raise
 ```
