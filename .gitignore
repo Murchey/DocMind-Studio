@@ -187,7 +187,7 @@ ComponentAgents/ppt-master-main/
 Extension/node_modules/
 Extension/dist/
 Extension/out/
-*.vsix
+# *.vsix
 
 # Agent workspace (runtime outputs, not source code)
 WORKSPACE/
