@@ -22,12 +22,14 @@ DocMind-Studio/                        # 根目录
 │   ├── doc-content-analysis/
 │   ├── doc-form-master-main/
 │   ├── excel-master-main/
-│   └── ppt-deep-summary-main/
+│   ├── ppt-deep-summary-main/
+│   ├── phd-research-agent/
+│   └── ppt-master/
 ├── WORKSPACE/                         # 总工作区（根目录下）
 │   └── {ProjectName}/                 # 项目工作区（PascalCase，由 AGENTS.md 创建）
 │       ├── doc-content-analysis/      # Agent 工作目录
 │       │   ├── input/
-│       │   ├── output/
+│       │   ├── converted/
 │       │   └── summary/
 │       ├── doc-form-master/           # Agent 工作目录
 │       │   ├── input/
@@ -35,7 +37,9 @@ DocMind-Studio/                        # 根目录
 │       │   ├── parsed/
 │       │   └── validated/
 │       ├── excel-master/
-│       └── ppt-deep-summary/
+│       ├── ppt-deep-summary/
+│       ├── phd-research-agent/
+│       └── ppt-master/
 ```
 
 ### 命名规则
@@ -64,11 +68,12 @@ DocMind-Studio/                        # 根目录
 
 | Agent | 路径 | 职责 |
 |-------|------|------|
-| doc-content-analysis | `ComponentAgents/doc-content-analysis/AGENT.md` | 文档内容读取与分析：批量转换、内容提取、图片提取、AI 总结 |
-| doc-form-master | `ComponentAgents/doc-form-master-main/AGENT.md` | 文档格式转换与处理 |
-| excel-master | `ComponentAgents/excel-master-main/AGENT.md` | Excel 文件处理 |
-| ppt-deep-summary | `ComponentAgents/ppt-deep-summary-main/AGENT.md` | PPT 深度总结 |
-| phd-research-agent | `ComponentAgents/phd-research-agent/AGENT.md` | 科研辅助：Idea 评估、Introduction 草稿、论文审阅 |
+| doc-content-analysis | `ComponentAgents/doc-content-analysis/AGENT.md` | DOCX、PDF 文档内容读取与分析：批量转换、内容提取、图片提取、AI 总结 |
+| doc-form-master | `ComponentAgents/doc-form-master-main/AGENT.md` | MD 文档转换 DOCX 文档，以及格式处理 |
+| excel-master | `ComponentAgents/excel-master-main/AGENT.md` | 可处理多表格内容对比，输出完整表格内容，以及表格内容向图的转化 |
+| ppt-deep-summary | `ComponentAgents/ppt-deep-summary-main/AGENT.md` | 可处理多 PPTX、PPT 文件的核心观点总结和内容梳理 |
+| phd-research-agent | `ComponentAgents/phd-research-agent/AGENT.md` | 博导论文辅助 Agent，可对论文核心内容进行修改建议 |
+| ppt-master | `ComponentAgents/ppt-master/AGENT.md` | 用于 PPT 生成的 Agent |
 
 ---
 
