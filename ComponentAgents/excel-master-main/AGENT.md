@@ -47,6 +47,9 @@
 | `excel_chart` | Data chart generation skill, generate visual charts based on data profiling results | When user needs visual display |
 | `excel_preview` | Visual preview operation skill, provide web interface | When needing user to confirm requirements or view results |
 | `excel_analysis` | Enhanced data analysis skill, support business-specific and region-specific data comparison analysis | When user needs business direction analysis, reference document support, or AI data summarization |
+| `constraint-parser` | Schedule constraint parsing skill, parse MD format schedule/meeting/constraint documents | When user needs scheduling, meeting arrangement, or daily planning |
+| `schedule-solver` | Constraint solving skill, use backtracking algorithm to generate schedule/meeting plans | After constraint parsing completes |
+| `schedule-export` | Schedule result export skill, export schedule results to Excel | After solving completes |
 
 ---
 

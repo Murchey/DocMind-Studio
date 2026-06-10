@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿# 此文件用于调度所有的 AGENT
+﻿﻿﻿﻿﻿﻿﻿﻿﻿# 此文件用于调度所有的 AGENT
 
 AGENTS 相当于 AGENT 能力的目录和工作方案的生成原则
 AGENT 相当于 SKILL 的能力目录
@@ -25,8 +25,7 @@ DocMind-Studio/                        # 根目录
 │   ├── ppt-deep-summary-main/
 │   ├── phd-research-agent/
 │   ├── ppt-master/
-│   ├── ppt-continuation-tool/
-│   └── schedule-agent/
+│   └── ppt-continuation-tool/
 ├── WORKSPACE/                         # 总工作区（根目录下）
 │   └── {ProjectName}/                 # 项目工作区（PascalCase，由 AGENTS.md 创建）
 │       ├── doc-content-analysis/      # Agent 工作目录
@@ -42,8 +41,7 @@ DocMind-Studio/                        # 根目录
 │       ├── ppt-deep-summary/
 │       ├── phd-research-agent/
 │       ├── ppt-master/
-│       ├── ppt-continuation-tool/
-│       └── schedule-agent/
+│       └── ppt-continuation-tool/
 ```
 
 ### 命名规则
@@ -74,12 +72,11 @@ DocMind-Studio/                        # 根目录
 |-------|------|------|
 | doc-content-analysis | `ComponentAgents/doc-content-analysis/AGENT.md` | DOCX、PDF 文档内容读取与分析：批量转换、内容提取、图片提取、AI 总结 |
 | doc-form-master | `ComponentAgents/doc-form-master-main/AGENT.md` | MD 文档转换 DOCX 文档，以及格式处理 |
-| excel-master | `ComponentAgents/excel-master-main/AGENT.md` | 可处理多表格内容对比，输出完整表格内容，以及表格内容向图的转化 |
+| excel-master | `ComponentAgents/excel-master-main/AGENT.md` | Excel 表格处理与分析：多表格对比、数据图表生成、排课与日程安排 |
 | ppt-deep-summary | `ComponentAgents/ppt-deep-summary-main/AGENT.md` | 可处理多 PPTX、PPT 文件的核心观点总结和内容梳理 |
 | phd-research-agent | `ComponentAgents/phd-research-agent/AGENT.md` | 博导论文辅助 Agent，可对论文核心内容进行修改建议 |
 | ppt-master | `ComponentAgents/ppt-master/AGENT.md` | 用于 PPT 生成的 Agent |
 | ppt-continuation-tool | `ComponentAgents/ppt-continuation-tool/AGENT.md` | 接收外部半完成 PPTX 和相关 DOCX 资料，分析已完成内容，继续生成剩余页面并输出完整 PPTX |
-| schedule-agent | `ComponentAgents/schedule-agent/AGENT.md` | 智能排课与日程安排：支持排课、会议安排、日程规划等多种场景，解析 MD 约束文档并生成优化方案 |
 
 ---
 

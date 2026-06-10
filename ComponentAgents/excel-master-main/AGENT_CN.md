@@ -47,6 +47,9 @@
 | `excel_chart` | 数据图表生成技能，基于数据探查结果生成可视化图表 | 用户需要可视化展示时 |
 | `excel_preview` | 可视化预览操作技能，提供网页界面 | 需要用户确认需求或查看结果时 |
 | `excel_analysis` | 增强数据分析技能，支持按业务需求进行特定方向和区域的数据比对分析 | 用户需要业务方向分析、参考文档支持或AI数据总结时 |
+| `constraint-parser` | 排课约束解析技能，解析 MD 格式的排课/会议/日程约束文档 | 用户需要排课、会议安排、日程规划时 |
+| `schedule-solver` | 约束求解技能，使用回溯算法生成排课/日程方案 | 约束解析完成后 |
+| `schedule-export` | 排课结果导出技能，将排课结果导出为 Excel | 求解完成后 |
 
 ---
 
@@ -364,7 +367,59 @@ Agent 根据用户需求分为两类：**定制化需求** 和 **通用化需求
 
 ---
 
-### 4. 注意事项
+### 4. 排课/日程安排需求
+
+**适用场景**：学校排课、会议安排、日程规划、值班安排、考试安排等
+
+**步骤**：
+
+1. **获取用户输入**
+
+   * 分析用户意图和场景类型（排课/会议/日程等）
+   * 支持直接读取 doc-content-analysis 输出的知识库 MD 文件
+   * 询问用户是否有特殊约束条件
+
+2. **创建工作区**
+
+   * **读取 `mkdir_workspace` Skill**：了解工作区创建脚本的使用方法
+   * 调用 `mkdir_workspace` Skill
+
+3. **约束解析**
+
+   * **读取 `constraint-parser` Skill**：了解约束解析脚本的使用方法
+   * 调用 `constraint-parser` Skill 解析 MD 格式的约束文档
+   * 输出：`constraints.json`（结构化约束数据）
+
+4. **约束求解**
+
+   * **读取 `schedule-solver` Skill**：了解约束求解脚本的使用方法
+   * 调用 `schedule-solver` Skill 生成排课/日程方案
+   * 输出：`schedule.json`（排课结果）
+
+5. **结果导出**
+
+   * **读取 `schedule-export` Skill**：了解结果导出脚本的使用方法
+   * 调用 `schedule-export` Skill 导出 Excel 课表/日程表
+   * 输出：按不同维度分表的 Excel 文件（班级/人员/资源）
+
+6. **生成摘要报告**
+
+   * 生成 `schedule_summary.md` 摘要报告
+   * 包含：排程统计、约束满足情况、建议
+
+**支持场景**：
+
+| 场景 | 说明 | 输入示例 |
+|------|------|----------|
+| 学校排课 | 根据教师、课程、教室、班级约束生成课表 | `排课需求.md` |
+| 会议安排 | 根据参会人员、会议室、时间偏好安排会议 | `会议安排.md` |
+| 日程规划 | 根据任务、人员、时间段规划日程 | `日程规划.md` |
+| 值班安排 | 根据人员、班次、轮换规则安排值班 | `值班安排.md` |
+| 考试安排 | 根据考试科目、考场、时间安排考试 | `考试安排.md` |
+
+---
+
+### 5. 注意事项
 
 * 所有文件操作均在 **工作区内进行**，避免误操作
 * 中间 CSV 文件仅作临时使用，不覆盖原始 Excel 文件
@@ -394,6 +449,9 @@ mkdir_workspace → [same_name_convertor] → excel_io.read → data_profile →
 
 增强分析流程：
 mkdir_workspace → excel_io.read → data_profile → excel_preview(confirm) → excel_analysis → [excel_preview(result)] → [excel_chart]
+
+排课/日程安排流程：
+mkdir_workspace → constraint-parser → schedule-solver → schedule-export
 
 [] 表示按需调用
 ```
