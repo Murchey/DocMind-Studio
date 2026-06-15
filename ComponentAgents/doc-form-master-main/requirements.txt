@@ -31,6 +31,9 @@ fonttools>=4.0.0
 # Web preview server
 Flask>=2.0.0
 
+# MarkItDown - document to markdown conversion
+markitdown[all]>=0.1.0
+
 # External dependencies (install separately):
 # - pandoc: winget install JohnMacFarlane.Pandoc (for markdown-converter)
 # - Microsoft Word or LibreOffice: for doc-compatibility and pdf-export
