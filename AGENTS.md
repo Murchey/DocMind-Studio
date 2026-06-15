@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿# 此文件用于调度所有的 AGENT
+﻿﻿﻿﻿﻿﻿﻿# 此文件用于调度所有的 AGENT
 
 AGENTS 相当于 AGENT 能力的目录和工作方案的生成原则
 AGENT 相当于 SKILL 的能力目录
@@ -192,6 +192,7 @@ shutil.copy("用户文档路径", agent_ws / "input" / "input.docx")
   Step 0: 创建 WORKSPACE/{ProjectName}/ppt-continuation-tool/
   输入：外部半完成 .pptx + .docx 资料
   输出：WORKSPACE/{ProjectName}/ppt-continuation-tool/output/
+  预览：http://localhost:5050（续写完成后可选启动）
 ```
 
 **触发关键词**：继续完成 PPT、PPT 续写、补充 PPT、完成演示文稿、半完成 PPT
@@ -216,6 +217,9 @@ def execute_ppt_continuation(project_name: str, pptx_file: str, docx_files: list
     agent_md = Path("ComponentAgents/ppt-continuation-tool/AGENT.md")
     # 按照 AGENT.md 中的流程执行
     # ...
+    
+    # 续写完成后，可选择启动预览服务器
+    # 预览URL: http://localhost:5050
 ```
 
 ---

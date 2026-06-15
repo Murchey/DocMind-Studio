@@ -30,6 +30,7 @@ output: WORKSPACE/{ProjectName}/ppt-continuation-tool/output/（继续完成的 
 - 路径：`{workspace}/output/`
 - 格式：`.pptx`（继续完成的完整 PPT）
 - 核心输出：`{workspace}/output/<项目名>_completed_<时间戳>.pptx`
+- 预览URL：`http://localhost:5050`（可选，续写完成后自动启动）
 
 ---
 
@@ -49,6 +50,8 @@ WORKSPACE/{ProjectName}/ppt-continuation-tool/
 │   └── check_report.json  # 容量检查报告
 ├── sources/               # 转换后的源材料
 │   └── *.md               # DOCX 转换的 Markdown
+├── preview/               # 预览资源（可选）
+│   └── *.html             # 预览页面
 └── output/                # 最终输出
     └── *.pptx             # 继续完成的 PPTX
 ```
@@ -136,7 +139,26 @@ WORKSPACE/{ProjectName}/ppt-continuation-tool/
   ```
 - **输出位置**：`{workspace}/output/`
 
-### Step 6: 生成 manifest.json
+### Step 6: 预览PPT效果
+- **目的**：提供续写后PPT的浏览器预览功能
+- **调用的 SKILL**：`pptx-preview`
+- **代码示例**：
+  ```python
+  import sys
+  sys.path.insert(0, 'ComponentAgents/ppt-continuation-tool/SKILLS/pptx-preview/scripts')
+  from pptx_preview_server import start_preview_server
+  
+  # 启动预览服务器
+  server_url = start_preview_server(
+      pptx_path='{workspace}/output/*.pptx',
+      port=5050,
+      auto_open=True
+  )
+  print(f"预览服务器已启动: {server_url}")
+  ```
+- **输出位置**：浏览器预览界面（http://localhost:5050）
+
+### Step 7: 生成 manifest.json
 - **目的**：生成处理清单供调度器消费
 - **输出位置**：`{workspace}/output/manifest.json`
 
@@ -169,6 +191,7 @@ WORKSPACE/{ProjectName}/ppt-continuation-tool/
 |-------|------|----------|
 | continuation-analyzer | 分析外部 PPT 结构，识别已完成/未完成页面 | Step 1-3 |
 | continuation-filler | 执行续写计划，生成新幻灯片 | Step 4-5 |
+| pptx-preview | 提供PPTX文件的浏览器预览功能 | Step 6 |
 
 ---
 
@@ -183,6 +206,7 @@ WORKSPACE/{ProjectName}/ppt-continuation-tool/
   "new_slides": 7,
   "source_files": ["input.pptx", "资料.docx"],
   "output_file": "{workspace}/output/项目名_completed_20260609_120000.pptx",
+  "preview_url": "http://localhost:5050",
   "generated_at": "2026-06-09T12:00:00"
 }
 ```

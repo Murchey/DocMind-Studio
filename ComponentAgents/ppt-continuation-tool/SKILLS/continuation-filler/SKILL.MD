@@ -87,11 +87,27 @@ manifest = {
     "new_slides": 7,
     "source_files": ["input.pptx", "资料.docx"],
     "output_file": "{workspace}/output/项目名_completed_20260609_120000.pptx",
+    "preview_url": "http://localhost:5050",
     "generated_at": "2026-06-09T12:00:00"
 }
 
 with open('{workspace}/output/manifest.json', 'w', encoding='utf-8') as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
+```
+
+### Step 4: 启动预览服务器（可选）
+```python
+import sys
+sys.path.insert(0, 'SKILLS/pptx-preview/scripts')
+from pptx_preview_server import start_preview_server
+
+# 启动预览服务器
+server_url = start_preview_server(
+    pptx_path='{workspace}/output/*.pptx',
+    port=5050,
+    auto_open=True
+)
+print(f"预览服务器已启动: {server_url}")
 ```
 
 ## 输出格式
@@ -121,6 +137,7 @@ with open('{workspace}/output/manifest.json', 'w', encoding='utf-8') as f:
   "new_slides": 7,
   "source_files": ["input.pptx", "资料.docx"],
   "output_file": "{workspace}/output/项目名_completed_20260609_120000.pptx",
+  "preview_url": "http://localhost:5050",
   "generated_at": "2026-06-09T12:00:00"
 }
 ```
