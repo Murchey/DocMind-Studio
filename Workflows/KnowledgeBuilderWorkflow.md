@@ -1,6 +1,6 @@
 # Knowledge Builder 工作流
 
-将多个文档转换为结构化知识库（JSON），供 AI 通过 Agent 调用和使用。
+将文档转换为结构化知识库（JSON），支持**增量更新**——新增文档时仅处理差异部分，不重建整个知识库。
 
 ---
 
@@ -9,28 +9,79 @@
 ```
 用户文档（DOC/DOCX/PDF/TXT）
     │
+    ▼ （调度器将文档放入 input/）
+┌──────────────────────────────────────────────┐
+│  Step 1: doc-content-analysis                 │
+│  ┌─────────────────────────────────────────┐  │
+│  │  1. doc-convertor：转换 + 内容/图片提取    │  │
+│  │  2. AI 总结：生成 summary.json + summary.md │  │
+│  │  3. 输出：manifest.json + content_hash   │  │
+│  └─────────────────────────────────────────┘  │
+│  输出：{workspace}/summary/manifest.json       │
+│    每个文档含 content_hash（SHA256）            │
+└──────────────────┬───────────────────────────┘
+                   │
+                   ▼ 读取 manifest.json（含 content_hash）
+┌──────────────────────────────────────────────┐
+│  Step 2: knowledge-builder（增量构建）          │
+│  ┌─────────────────────────────────────────┐  │
+│  │  1. 读取 .kb_state.json（如存在）         │  │
+│  │  2. 对比 content_hash：                   │  │
+│  │     + 新增 → 添加到索引                    │  │
+│  │     ~ 变更 → 更新索引                      │  │
+│  │     - 删除 → 从索引移除                    │  │
+│  │     = 未变更 → 跳过                        │  │
+│  │  3. 增量合并关键词/概念索引                │  │
+│  │  4. 更新版本号 + 变更日志                  │  │
+│  └─────────────────────────────────────────┘  │
+│  输出：knowledge-base/                         │
+│    ├── .kb_state.json     # 状态（指纹+版本）  │
+│    ├── kb-manifest.json   # 总索引             │
+│    ├── documents/         # 文档索引            │
+│    ├── keywords/          # 关键词索引          │
+│    ├── concepts/          # 概念索引            │
+│    └── toc.json           # 目录结构            │
+└──────────────────────────────────────────────┘
+```
+
+---
+
+## 增量更新流程（日常使用）
+
+```
+用户新增/修改/删除文档
+    │
     ▼
-┌─────────────────────────────┐
-│  Step 1: doc-content-analysis│  文档转换 + 内容提取 + AI 总结
-│  输入：workspace/input/      │
-│  输出：workspace/summary/    │
-│    ├── manifest.json         │
-│    └── <文件名>/text/        │
-│        ├── content.json      │  结构化文档内容
-│        └── summary.json      │  结构化索引（含关键词、链接、位置）
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│  Step 2: knowledge-builder   │  索引聚合 + 知识库构建
-│  输入：summary/manifest.json │
-│  输出：knowledge-base/       │
-│    ├── kb-manifest.json      │  知识库总索引
-│    ├── documents/            │  文档索引
-│    ├── keywords/             │  关键词索引
-│    ├── concepts/             │  核心概念索引
-│    └── toc.json              │  目录结构
-└─────────────────────────────┘
+调度器：只将差异文档放入 input/
+    │
+    ▼
+doc-content-analysis 处理差异文档
+    ↓ 输出 manifest.json（含 content_hash）
+    ↓
+kb_manager.py update
+    ↓
+┌─────────────────────────────────────────┐
+│ 对比 manifest vs .kb_state.json          │
+│                                         │
+│  manifest: [doc_A (hash1), doc_B (hash2)]│
+│  state:    [doc_A (hash1), doc_C (hash3)]│
+│                                         │
+│  → doc_B: 新增（hash2 不在 state 中）    │
+│  → doc_C: 删除（state 有但 manifest 无） │
+│  → doc_A: 未变更（hash 匹配）            │
+└──────────────┬──────────────────────────┘
+               │
+               ▼
+增量合并：
+  • 关键词索引：doc_B 的新关键词加入，doc_C 的关键词移除
+  • 概念索引：同理增量更新
+  • 目录结构：同理增量更新
+  • 文档关联：自动更新跨文档引用
+    ↓
+保存 .kb_state.json（version += 1, change_log += 1）
+生成/更新 kb-manifest.json
+    ↓
+完成——知识库已更新，无需重建
 ```
 
 ---
@@ -39,308 +90,217 @@
 
 **Agent**：`doc-content-analysis`
 **配置**：`ComponentAgents/doc-content-analysis/AGENT.md`
+**Skill**：`doc-convertor` + `img-reader`（可选） + AI 总结
 
 ### 输入
 
 ```
-doc-content-analysis/workspace/input/
-├── report1.doc
-├── report2.docx
-├── paper.pdf
-└── notes.txt
+{workspace}/input/
+├── report1.doc          # 旧版 Word
+├── report2.docx         # Word
+├── paper.pdf            # PDF
+└── notes.txt            # 纯文本
 ```
 
 ### 执行
 
-加载 `ComponentAgents/doc-content-analysis/AGENT.md`，按 Step 1 → Step 5 执行。
+加载 `ComponentAgents/doc-content-analysis/AGENT.md`，按 Step 1 → Step 5b 执行：
+
+1. **初始化工作区**：创建 `{workspace}/converted/` 和 `{workspace}/summary/`
+2. **格式转换 + 内容提取**：`doc-convertor` Skill → `{workspace}/converted/` + `{workspace}/summary/*/text/content.json`
+3. **图片提取**：`doc-convertor` Skill → `{workspace}/summary/*/img/`
+4. **AI 总结**：AI 读取 content.json → 生成 `summary.json` + `summary.md`
+5. **图片识别**（可选）：`img-reader` Skill → OCR + AI 视觉总结
+6. **生成 manifest.json**：含 `content_hash`（每个 summary.json 的 SHA256）
+7. **知识库构建**（调度器触发）：`knowledge-builder` Skill → `knowledge-base/`
 
 ### 输出
 
 ```
-doc-content-analysis/workspace/summary/
-├── manifest.json                    # 处理清单
+{workspace}/summary/
+├── manifest.json              # 处理清单（含 content_hash）
 ├── report1/
 │   └── text/
-│       ├── content.json             # 结构化文档内容
-│       └── summary.json             # 结构化索引
+│       ├── content.json       # 结构化文档内容
+│       ├── summary.json       # 结构化索引（含 content_hash）
+│       └── summary.md         # 可读总结
 ├── report2/
 │   └── text/
 │       ├── content.json
-│       └── summary.json
+│       ├── summary.json
+│       └── summary.md
 ├── paper/
 │   └── text/
 │       ├── content.json
-│       └── summary.json
+│       ├── summary.json
+│       └── summary.md
 ├── notes/
 │   └── text/
 │       ├── content.json
-│       └── summary.json
-└── 综合总结.json
+│       ├── summary.json
+│       └── summary.md
+├── 综合总结.json
+└── 综合总结.md
 ```
 
-**关键输出**：每个文档的 `summary.json` 包含：
-- `id`：文档唯一标识
-- `keywords`：关键词列表（含词频、相关度）
-- `sections`：章节结构（含 content_link）
-- `key_info`：关键信息（含位置标注）
-- `content_links`：内容链接
+### manifest.json 结构（含 content_hash）
+
+```json
+{
+  "status": "completed",
+  "total_files": 3,
+  "success_count": 2,
+  "failed_count": 1,
+  "documents": [
+    {
+      "source_file": "report1.doc",
+      "status": "success",
+      "output_dir": "{workspace}/summary/report1/",
+      "content_json": "{workspace}/summary/report1/text/content.json",
+      "summary_json": "{workspace}/summary/report1/text/summary.json",
+      "summary_md": "{workspace}/summary/report1/text/summary.md",
+      "content_hash": "abc123def456789...",
+      "image_count": 5,
+      "has_img_summary": true
+    }
+  ],
+  "has_combined_summary": true,
+  "combined_summary_json": "{workspace}/summary/综合总结.json",
+  "combined_summary_md": "{workspace}/summary/综合总结.md",
+  "generated_at": "2024-01-01T12:00:00"
+}
+```
+
+**关键字段**：
+- `content_hash`：summary.json 内容的 SHA256 哈希，用于增量检测文档是否变更
+- `summary_json`：下游 knowledge-builder 消费的入口文件
 
 ---
 
 ## Step 2: 知识库构建（knowledge-builder）
 
-**处理方式：AI 原生（无需 Python 脚本）**
+**Skill**：`knowledge-builder`
+**配置**：`ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/SKILL.MD`
 
-AI 助手读取 `doc-content-analysis` 的输出，构建结构化知识库。
+### 2.1 首次构建（init）
 
-### 2.1 读取输入
+```bash
+python ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py init \
+  knowledge-base/ \
+  {workspace}/summary/ \
+  {workspace}/summary/manifest.json
+```
 
-读取 `doc-content-analysis/workspace/summary/manifest.json`，获取所有文档的处理结果。
-
-对每个成功处理的文档，读取其 `summary.json` 索引文件。
-
-### 2.2 构建知识库目录结构
-
-在项目根目录创建 `knowledge-base/`：
+**输出**：
 
 ```
 knowledge-base/
-├── kb-manifest.json           # 知识库总索引（入口）
-├── documents/                 # 文档索引
-│   ├── doc_001.json           # 文档 1 的完整索引
-│   ├── doc_002.json           # 文档 2 的完整索引
-│   └── doc_003.json
-├── keywords/                  # 关键词索引
-│   ├── index.json             # 关键词 → 文档映射
-│   └── <keyword>.json         # 单个关键词的详细索引
-├── concepts/                  # 核心概念索引
-│   ├── index.json             # 概念 → 文档映射
-│   └── <concept>.json         # 单个概念的详细索引
-└── toc.json                   # 文档目录结构（篇目）
+├── .kb_state.json              # 知识库状态
+├── kb-manifest.json            # 知识库总索引（入口）
+├── documents/                  # 文档索引
+│   ├── doc_001.json
+│   └── doc_002.json
+├── keywords/                   # 关键词索引
+│   └── index.json
+├── concepts/                   # 核心概念索引
+│   └── index.json
+└── toc.json                    # 目录结构
 ```
 
-### 2.3 生成 kb-manifest.json（知识库总索引）
+### 2.2 增量更新（update）— 日常使用
+
+```bash
+python ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py update \
+  knowledge-base/ \
+  {workspace}/summary/ \
+  {workspace}/summary/manifest.json
+```
+
+**增量更新行为**：
+
+| 场景 | 操作 | 影响范围 |
+|------|------|----------|
+| 新文档（content_hash 不在 state 中） | 添加到所有索引 | documents/, keywords/, concepts/, toc.json |
+| 变更文档（content_hash 不匹配） | 更新索引 | documents/, keywords/, concepts/, toc.json |
+| 删除文档（state 中有但 manifest 无） | 从索引移除 | documents/, keywords/, concepts/, toc.json |
+| 未变更文档（content_hash 匹配） | 跳过 | 无 |
+
+每个操作记录在 `.kb_state.json` 的 `change_log` 中。
+
+### 2.3 状态查询（status）
+
+```bash
+python ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py status \
+  knowledge-base/ \
+  {workspace}/summary/ \
+  {workspace}/summary/manifest.json
+```
+
+输出示例：
+
+```
+Knowledge Base Status (v3)
+  Documents: 12 total
+  Keywords:  87
+  Concepts:  23
+  Last updated: 2024-06-01T12:00:00Z
+
+Pending Changes:
+  + New:     2 document(s)
+      - doc_report3 (report3.docx)
+      - doc_paper2 (paper2.pdf)
+  ~ Changed: 1 document(s)
+      - doc_report1 (report1.docx)
+  - Removed: 0 document(s)
+  = Unchanged: 9 document(s)
+```
+
+---
+
+## .kb_state.json 结构
 
 ```json
 {
-  "version": "1.0",
-  "name": "knowledge-base",
-  "generated_at": "2024-01-01T12:00:00",
-  "document_count": 4,
-  "keyword_count": 50,
-  "concept_count": 20,
-
-  "documents": [
-    {
-      "id": "doc_001",
-      "title": "报告标题",
-      "source_file": "report1.doc",
-      "author": "作者",
-      "language": "zh",
-      "summary": "一段话概述...",
-      "keywords": ["关键词1", "关键词2"],
-      "sections_count": 5,
-      "content_link": "doc-content-analysis/workspace/summary/report1/text/content.json",
-      "index_link": "documents/doc_001.json"
+  "version": 3,
+  "created_at": "2024-01-01T12:00:00Z",
+  "updated_at": "2024-06-01T12:00:00Z",
+  "document_count": 5,
+  "keyword_count": 42,
+  "concept_count": 15,
+  "documents": {
+    "doc_001": {
+      "source_file": "report1.docx",
+      "content_hash": "abc123def456...",
+      "title": "2024年度报告",
+      "added_at": "2024-01-01T12:00:00Z",
+      "updated_at": "2024-05-15T08:00:00Z"
     }
-  ],
-
-  "top_keywords": [
-    {"keyword": "关键词1", "document_count": 3, "total_frequency": 45},
-    {"keyword": "关键词2", "document_count": 2, "total_frequency": 28}
-  ],
-
-  "top_concepts": [
-    {"concept": "核心概念1", "document_count": 3, "importance": 0.95},
-    {"concept": "核心概念2", "document_count": 2, "importance": 0.87}
-  ]
-}
-```
-
-### 2.4 生成文档索引（documents/）
-
-每个文档生成 `documents/<id>.json`，扩展自 doc-content-analysis 的 summary.json：
-
-```json
-{
-  "id": "doc_001",
-  "title": "报告标题",
-  "source_file": "report1.doc",
-  "author": "作者",
-  "language": "zh",
-  "generated_at": "2024-01-01T12:00:00",
-
-  "summary": "文档摘要...",
-
-  "keywords": [
-    {"keyword": "关键词1", "frequency": 12, "relevance": 0.95}
-  ],
-
-  "sections": [
-    {
-      "heading": "章节标题",
-      "level": 2,
-      "paragraph_range": [1, 15],
-      "key_points": ["要点1", "要点2"],
-      "content_link": "doc-content-analysis/workspace/summary/report1/text/content.json#/paragraphs/0-14"
-    }
-  ],
-
-  "key_info": {
-    "data": [{"value": "关键数据", "location": "paragraph_5"}],
-    "conclusions": [{"text": "核心观点", "location": "paragraph_12"}],
-    "references": [{"text": "重要引用", "location": "paragraph_20"}]
   },
-
-  "tables": [
+  "change_log": [
     {
-      "index": 0,
-      "description": "表格描述",
-      "location": "paragraph_8",
-      "content_link": "doc-content-analysis/workspace/summary/report1/text/content.json#/tables/0"
-    }
-  ],
-
-  "images": [
+      "action": "init",
+      "version": 1,
+      "timestamp": "2024-01-01T12:00:00Z",
+      "documents_added": 3,
+      "message": "首次全量构建"
+    },
     {
-      "file": "image_1.png",
-      "path": "doc-content-analysis/workspace/summary/report1/img/image_1.png",
-      "description": "图片描述",
-      "ocr_link": "doc-content-analysis/workspace/summary/report1/img/text/image_1.txt",
-      "summary_link": "doc-content-analysis/workspace/summary/report1/img/img-summary/image_1.md"
-    }
-  ],
-
-  "content_links": {
-    "content_json": "doc-content-analysis/workspace/summary/report1/text/content.json",
-    "summary_md": "doc-content-analysis/workspace/summary/report1/text/summary.md",
-    "images_dir": "doc-content-analysis/workspace/summary/report1/img/"
-  },
-
-  "related_documents": [
-    {"id": "doc_002", "relation": "共同主题", "shared_keywords": ["关键词1"]}
-  ]
-}
-```
-
-### 2.5 生成关键词索引（keywords/）
-
-`keywords/index.json` — 关键词到文档的映射：
-
-```json
-{
-  "generated_at": "2024-01-01T12:00:00",
-  "total_keywords": 50,
-  "keywords": [
+      "action": "update",
+      "version": 2,
+      "timestamp": "2024-02-15T10:00:00Z",
+      "new_count": 1,
+      "changed_count": 0,
+      "removed_count": 0,
+      "message": "+1 added"
+    },
     {
-      "keyword": "关键词1",
-      "total_frequency": 45,
-      "document_count": 3,
-      "documents": [
-        {"id": "doc_001", "frequency": 12, "relevance": 0.95},
-        {"id": "doc_002", "frequency": 20, "relevance": 0.90},
-        {"id": "doc_003", "frequency": 13, "relevance": 0.85}
-      ],
-      "detail_link": "keywords/关键词1.json"
-    }
-  ]
-}
-```
-
-`keywords/<keyword>.json` — 单个关键词详情：
-
-```json
-{
-  "keyword": "关键词1",
-  "total_frequency": 45,
-  "document_count": 3,
-  "documents": [
-    {
-      "id": "doc_001",
-      "title": "报告标题",
-      "frequency": 12,
-      "relevance": 0.95,
-      "locations": ["paragraph_3", "paragraph_8", "paragraph_15"],
-      "context_snippets": ["包含关键词的上下文片段..."]
-    }
-  ],
-  "related_keywords": ["相关词1", "相关词2"]
-}
-```
-
-### 2.6 生成核心概念索引（concepts/）
-
-`concepts/index.json` — 概念到文档的映射：
-
-```json
-{
-  "generated_at": "2024-01-01T12:00:00",
-  "total_concepts": 20,
-  "concepts": [
-    {
-      "concept": "核心概念1",
-      "definition": "概念定义...",
-      "importance": 0.95,
-      "document_count": 3,
-      "documents": ["doc_001", "doc_002", "doc_003"],
-      "detail_link": "concepts/核心概念1.json"
-    }
-  ]
-}
-```
-
-`concepts/<concept>.json` — 单个概念详情：
-
-```json
-{
-  "concept": "核心概念1",
-  "definition": "概念定义...",
-  "importance": 0.95,
-  "document_count": 3,
-  "occurrences": [
-    {
-      "document_id": "doc_001",
-      "document_title": "报告标题",
-      "locations": [
-        {"section": "章节标题", "paragraph": 5, "snippet": "概念出现的上下文..."}
-      ]
-    }
-  ],
-  "related_concepts": ["相关概念1", "相关概念2"],
-  "related_keywords": ["关键词1", "关键词2"]
-}
-```
-
-### 2.7 生成目录结构（toc.json）
-
-```json
-{
-  "generated_at": "2024-01-01T12:00:00",
-  "document_count": 4,
-  "toc": [
-    {
-      "id": "doc_001",
-      "title": "报告标题",
-      "source_file": "report1.doc",
-      "sections": [
-        {
-          "heading": "第一章 引言",
-          "level": 1,
-          "paragraph_range": [1, 20],
-          "children": [
-            {
-              "heading": "1.1 背景",
-              "level": 2,
-              "paragraph_range": [1, 10]
-            },
-            {
-              "heading": "1.2 目的",
-              "level": 2,
-              "paragraph_range": [11, 20]
-            }
-          ]
-        }
-      ]
+      "action": "update",
+      "version": 3,
+      "timestamp": "2024-06-01T12:00:00Z",
+      "new_count": 1,
+      "changed_count": 1,
+      "removed_count": 0,
+      "message": "+1 added, ~1 updated"
     }
   ]
 }
@@ -348,33 +308,65 @@ knowledge-base/
 
 ---
 
-## 输出规范
+## kb-manifest.json 结构（知识库总索引）
 
-### 知识库入口
+```json
+{
+  "version": 3,
+  "name": "knowledge-base",
+  "generated_at": "2024-06-01T12:00:00Z",
+  "document_count": 5,
+  "keyword_count": 42,
+  "concept_count": 15,
+  "documents": [
+    {
+      "id": "doc_001",
+      "title": "2024年度报告",
+      "source_file": "report1.docx",
+      "added_at": "2024-01-01T12:00:00Z",
+      "updated_at": "2024-05-15T08:00:00Z",
+      "content_hash": "abc123...",
+      "index_link": "documents/doc_001.json"
+    }
+  ],
+  "top_keywords": [
+    {"keyword": "关键词1", "document_count": 3, "total_frequency": 45}
+  ],
+  "top_concepts": [
+    {"concept": "核心概念1", "document_count": 3, "importance": 0.95}
+  ],
+  "change_log": [
+    // 最近 5 条变更记录
+  ]
+}
+```
 
-调度器/下游 Agent 通过 `knowledge-base/kb-manifest.json` 进入知识库。
+---
 
-### 使用方式
+## 使用方式
 
-1. 读取 `kb-manifest.json` 获取文档列表和关键词/概念概览
-2. 读取 `documents/<id>.json` 获取单文档详细索引
-3. 读取 `keywords/index.json` 按关键词查找相关文档
-4. 读取 `concepts/index.json` 按概念查找相关文档
-5. 通过 `content_link` 追溯到原始内容（content.json）
-6. 通过 `toc.json` 浏览文档目录结构
-
-### 状态流转
+### 首次使用
 
 ```
-doc-content-analysis 完成
-    ↓ 读取 manifest.json
-    ↓ status == "completed"
-knowledge-builder 开始
-    ↓ 读取所有 summary.json
-    ↓ 构建知识库
-    ↓ 生成 kb-manifest.json
-知识库就绪
-    ↓ 下游 Agent 可消费
+1. 将所有文档放入 input/
+2. 执行 doc-content-analysis（生成 summary/）
+3. 执行 kb_manager.py init（首次全量构建）
+```
+
+### 日常增量
+
+```
+1. 将新增/修改的文档放入 input/
+2. 执行 doc-content-analysis（仅分析差异文档）
+3. 执行 kb_manager.py update（增量更新知识库）
+```
+
+### 文档删除
+
+```
+1. 从 input/ 中移除文档
+2. 重新执行 doc-content-analysis（manifest 中不再包含该文档）
+3. 执行 kb_manager.py update（该文档将从知识库中自动移除）
 ```
 
 ---
@@ -383,79 +375,32 @@ knowledge-builder 开始
 
 当 doc-content-analysis 识别到需求类文档时，自动触发需求传递流程：
 
-### 需求识别
-
-doc-content-analysis 在 Step 4 识别文档类型：
-- **知识文档**：进入标准知识库构建流程
-- **需求文档**：进入需求传递流程
-
-### 需求文档处理
-
 ```
 需求文档（排课要求、表格分析需求等）
     │
     ▼
-┌─────────────────────────────┐
-│  doc-content-analysis       │
-│  Step 4: 识别为需求文档      │
-│  输出：summary.json/md      │
-│    ├── document_type: "requirement"
-│    ├── requirement_type: "schedule" | "excel"
-│    └── target_agent: "schedule-agent" | "excel-master"
-└─────────────┬───────────────┘
-              │
-              ▼
-┌─────────────────────────────┐
-│  调度器读取 manifest.json    │
-│  识别需求类型和目标 Agent    │
-└─────────────┬───────────────┘
-              │
-              ├─── schedule-agent ───┐
-              │                      ▼
-              │    ┌─────────────────────────────┐
-              │    │  schedule-agent             │
-              │    │  input: summary.md          │
-              │    │  output: 课表 Excel         │
-              │    └─────────────────────────────┘
-              │
-              └─── excel-master ─────┐
-                                     ▼
-                   ┌─────────────────────────────┐
-                   │  excel-master               │
-                   │  input: summary.md          │
-                   │  output: 分析结果 Excel     │
-                   └─────────────────────────────┘
+doc-content-analysis 识别为需求文档
+    ↓ summary.json 含 document_type: "requirement"
+    ↓
+调度器读取 manifest.json
+    ↓ 识别 target_agent
+    │
+    ├─── excel-master（排课/表格分析需求）
+    │     input: summary.md
+    │     output: 排课 Excel / 分析结果 Excel
+    │
+    └─── 其他 Agent
 ```
 
 ### 调度器职责
 
-1. 读取 `doc-content-analysis/workspace/summary/manifest.json`
+1. 读取 `{workspace}/summary/manifest.json`
 2. 检查每个文档的 `document_type` 字段
-3. 对于 `document_type: "requirement"` 的文档：
-   - 读取 `target_agent` 字段确定目标 Agent
-   - 将 `summary.md` 复制到目标 Agent 的 `input/` 目录
-   - 调用目标 Agent 执行任务
-
-### 需求传递示例
-
-```python
-# 调度器读取 manifest
-with open('doc-content-analysis/workspace/summary/manifest.json', 'r') as f:
-    manifest = json.load(f)
-
-for doc in manifest['documents']:
-    if doc.get('document_type') == 'requirement':
-        target_agent = doc.get('target_agent')
-        summary_md = doc['summary_md']
-        
-        # 复制到目标 Agent
-        if target_agent == 'schedule-agent':
-            shutil.copy(summary_md, 'schedule-agent/workspace/input/需求.md')
-            # 调用 schedule-agent
-        elif target_agent == 'excel-master':
-            shutil.copy(summary_md, 'excel-master/workspace/input/需求.md')
-            # 调用 excel-master
-```
+3. 对于 `requirement` 类型：
+   - 读取 `target_agent` 确定目标 Agent
+   - 将 `summary.md` 复制到目标 Agent 的 `input/`
+   - 调用目标 Agent
+4. 同时触发知识库构建（即使有需求文档，知识文档仍需入库）
 
 ---
 
@@ -466,7 +411,8 @@ for doc in manifest['documents']:
 | doc-content-analysis 未执行 | 提示用户先执行 Step 1 |
 | manifest.json status=failed | 读取失败文件的 error，决定跳过或终止 |
 | manifest.json status=empty | 告知用户无文件可处理 |
-| 单文档 summary.json 缺失 | 跳过该文档，在 kb-manifest.json 中标记 |
-| 知识库目录已存在 | 清空后重新构建 |
+| .kb_state.json 不存在（update 模式） | 自动回退到 init 全量构建 |
+| 单文档 summary.json 缺失 | 跳过该文档，记录警告 |
+| 知识库目录已存在（init 模式） | 清空后重新构建 |
 | 需求文档目标 Agent 不存在 | 记录警告，跳过该需求 |
-| 需求文档格式不规范 | 尝试解析，记录警告 |
+| content_hash 计算不一致 | 标记文档为变更，重新索引 |

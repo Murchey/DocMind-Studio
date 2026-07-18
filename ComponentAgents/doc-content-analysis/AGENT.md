@@ -79,6 +79,7 @@ output: {workspace}/summary/（结构化 JSON 总结 + MD 可读总结 + 提取�
       "content_json": "{workspace}/summary/report1/text/content.json",
       "summary_json": "{workspace}/summary/report1/text/summary.json",
       "summary_md": "{workspace}/summary/report1/text/summary.md",
+      "content_hash": "abc123def456...",
       "image_count": 5,
       "has_img_summary": true
     },
@@ -119,6 +120,7 @@ output: {workspace}/summary/（结构化 JSON 总结 + MD 可读总结 + 提取�
   "table_count": 3,
   "image_count": 5,
   "language": "zh",
+  "content_hash": "abc123def456...",
   "generated_at": "2024-01-01T12:00:00",
 
   "summary": "一段话概括文档核心内容...",
@@ -214,13 +216,14 @@ output: {workspace}/summary/（结构化 JSON 总结 + MD 可读总结 + 提取�
 # Skills 索引（按需加载，禁止预读）
 
 ```
-doc-convertor → AI 总结 → img-reader（可选，需视觉能力） → 输出 {workspace}/summary/
+doc-convertor → AI 总结 → img-reader（可选，需视觉能力） → knowledge-builder（增量构建） → 输出 {workspace}/summary/
 ```
 
 | Skill | 类型 | 执行方式 | 触发条件 |
 |-------|------|----------|----------|
 | doc-convertor | 脚本型 | 读取 SKILL.MD → 执行 Python 脚本（转换 + 内容提取 + 图片提取） | 始终执行 |
 | img-reader | 脚本型 + AI 原生 | 读取 SKILL.MD → 执行 Python 脚本（OCR）+ AI 视觉总结 | AI 模型具备视觉能力时 |
+| knowledge-builder | 脚本型 | 读取 SKILL.MD → 执行 kb_manager.py（增量知识库构建） | 调度器调用 KnowledgeBuilderWorkflow 时 |
 
 ---
 
@@ -625,10 +628,33 @@ results = reader.process_batch(
 import json
 from pathlib import Path
 from datetime import datetime
+import hashlib
+
+def _hash_file_content(path: Path) -> str:
+    """计算 JSON 文件内容的 SHA256 哈希"""
+    with open(path, "r", encoding="utf-8") as f:
+        raw = json.dumps(json.load(f), sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+documents = []
+for f in processed_files:
+    summary_json_path = Path('{workspace}/summary') / f['name'] / 'text' / 'summary.json'
+    content_hash = _hash_file_content(summary_json_path) if summary_json_path.exists() else ""
+    documents.append({
+        "source_file": f['original_name'],
+        "status": "success",
+        "output_dir": str(Path('{workspace}/summary') / f['name']),
+        "content_json": str(summary_json_path.parent / 'content.json'),
+        "summary_json": str(summary_json_path),
+        "summary_md": str(summary_json_path.parent / 'summary.md'),
+        "content_hash": content_hash,
+        "image_count": f.get('image_count', 0),
+        "has_img_summary": f.get('has_img_summary', False),
+    })
 
 manifest = {
     "status": "completed",
-    "total_files": len(documents),
+    "total_files": len(processed_files),
     "success_count": sum(1 for d in documents if d["status"] == "success"),
     "failed_count": sum(1 for d in documents if d["status"] == "failed"),
     "documents": documents,
@@ -640,6 +666,62 @@ manifest = {
 
 with open('{workspace}/summary/manifest.json', 'w', encoding='utf-8') as f:
     json.dump(manifest, f, indent=2, ensure_ascii=False)
+```
+
+## Step 5b: 知识库构建（调度器按需触发）
+
+**触发条件**：调度器调用 KnowledgeBuilderWorkflow 时执行。
+
+读取 `SKILLS/knowledge-builder/SKILL.MD`，调用 `kb_manager.py` 构建/更新知识库：
+
+```python
+import sys
+sys.path.insert(0, 'SKILLS/knowledge-builder/scripts')
+from kb_manager import cmd_init, cmd_update, cmd_status
+
+# 模式选择：如果 knowledge-base/.kb_state.json 存在，使用 update；否则 init
+kb_dir = Path('knowledge-base/')
+state_path = kb_dir / '.kb_state.json'
+
+if state_path.exists():
+    # 增量更新模式——仅处理新增/变更的文档
+    cmd_update(kb_dir, Path('{workspace}/summary/'), Path('{workspace}/summary/manifest.json'))
+else:
+    # 首次全量构建
+    cmd_init(kb_dir, Path('{workspace}/summary/'), Path('{workspace}/summary/manifest.json'))
+```
+
+**或者直接使用 update（自动检测并回退到 init）**：
+
+```bash
+python SKILLS/knowledge-builder/scripts/kb_manager.py update \
+  knowledge-base/ \
+  {workspace}/summary/ \
+  {workspace}/summary/manifest.json
+```
+
+**构建内容**：
+- `knowledge-base/.kb_state.json`：知识库状态（版本号、文档指纹、变更日志）
+- `knowledge-base/kb-manifest.json`：知识库总索引
+- `knowledge-base/documents/`：每个文档的完整索引
+- `knowledge-base/keywords/index.json`：关键词到文档的映射
+- `knowledge-base/concepts/index.json`：概念到文档的映射
+- `knowledge-base/toc.json`：目录结构
+
+**增量更新原理**：
+- 对比 manifest.json 中的 `content_hash` 与 `.kb_state.json` 中记录的哈希
+- 新增文档 → 添加到所有索引
+- 变更文档 → 更新索引（重新计算关键词频率、概念重要性）
+- 删除文档 → 从索引中移除
+- 未变更文档 → 跳过
+
+**状态查询（可选）**：
+
+```bash
+python SKILLS/knowledge-builder/scripts/kb_manager.py status \
+  knowledge-base/ \
+  {workspace}/summary/ \
+  {workspace}/summary/manifest.json
 ```
 
 ---

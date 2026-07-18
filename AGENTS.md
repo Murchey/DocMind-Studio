@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿# 此文件用于调度所有的 AGENT
+﻿﻿# 此文件用于调度所有的 AGENT
 
 AGENTS 相当于 AGENT 能力的目录和工作方案的生成原则
 AGENT 相当于 SKILL 的能力目录
@@ -139,19 +139,60 @@ shutil.copy("用户文档路径", agent_ws / "input" / "input.docx")
 
 **ProjectName 命名**：从用户文档名或任务描述中提取，转为 PascalCase。如用户未指定，使用文档名。
 
-### 1. 知识库构建
+### 1. 知识库构建（支持增量更新）
 
 当用户需要将多个文档转换为结构化知识库时：
 
+**首次构建**：
 ```
 用户文档 → KnowledgeBuilderWorkflow
   Step 0: 创建 WORKSPACE/{ProjectName}/
   Step 1: doc-content-analysis（WORKSPACE/{ProjectName}/doc-content-analysis/）
-  Step 2: knowledge-builder（WORKSPACE/{ProjectName}/knowledge-builder/）
-  输出：WORKSPACE/{ProjectName}/knowledge-base/
+      生成 manifest.json + summary.json（含 content_hash）
+  Step 2: knowledge-builder（kb_manager.py init）
+      全量构建 knowledge-base/
+  输出：knowledge-base/（含 .kb_state.json）
 ```
 
-**触发关键词**：知识库、结构化、文档总结、批量处理、关键词提取、概念索引
+**增量更新**（新增/修改/删除文档后）：
+```
+新文档 → doc-content-analysis（仅分析差异文档）
+    ↓ 生成 manifest.json（含 content_hash）
+    ↓
+kb_manager.py update
+    ↓ 对比 .kb_state.json 中的指纹
+    ↓ +新增 / ~变更 / -删除 / =跳过
+    ↓
+增量合并索引（不重建整个知识库）
+    ↓
+knowledge-base/ 已更新（version += 1）
+```
+
+**状态查询**：
+```bash
+python ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py status \
+  knowledge-base/ \
+  WORKSPACE/{ProjectName}/doc-content-analysis/summary/ \
+  WORKSPACE/{ProjectName}/doc-content-analysis/summary/manifest.json
+```
+
+**触发关键词**：知识库、结构化、文档总结、批量处理、关键词提取、概念索引、增量更新
+
+**调度代码示例**：
+```python
+import subprocess
+from pathlib import Path
+
+ws = Path(f"WORKSPACE/{project_name}/doc-content-analysis/summary/")
+kb_dir = Path("knowledge-base/")
+kb_script = Path("ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py")
+
+# 增量更新（自动检测 init 还是 update）
+subprocess.run([
+    "python", str(kb_script), "update",
+    str(kb_dir), str(ws), str(ws / "manifest.json")
+], check=True)
+```
 
 ### 2. 文档格式处理
 
