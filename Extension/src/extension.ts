@@ -96,6 +96,10 @@ export function activate(context: vscode.ExtensionContext) {
     const progressFile = vscode.workspace.getConfiguration('docmind').get<string>('progressFile') || 'WORKSPACE/.docmind-progress.json';
     const configuredWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(rootPath, progressFile));
     const watcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(rootPath, '**/*progress*.json'));
+    
+    // 新增：监听工作流执行器状态文件（.workflow_state.json）
+    const workflowStateWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(rootPath, '**/WORKSPACE/*/.workflow_state.json'));
+    
     const refreshProgress = () => {
       DashboardPanel.refresh(rootPath);
       knowledgeBaseProvider.refresh();
@@ -106,8 +110,15 @@ export function activate(context: vscode.ExtensionContext) {
     watcher.onDidCreate(refreshProgress, null, context.subscriptions);
     watcher.onDidChange(refreshProgress, null, context.subscriptions);
     watcher.onDidDelete(refreshProgress, null, context.subscriptions);
+    
+    // 新增：工作流状态变更时刷新 Dashboard
+    workflowStateWatcher.onDidCreate(refreshProgress, null, context.subscriptions);
+    workflowStateWatcher.onDidChange(refreshProgress, null, context.subscriptions);
+    workflowStateWatcher.onDidDelete(refreshProgress, null, context.subscriptions);
+    
     context.subscriptions.push(configuredWatcher);
     context.subscriptions.push(watcher);
+    context.subscriptions.push(workflowStateWatcher);
   }
 }
 

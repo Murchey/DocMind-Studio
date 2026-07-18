@@ -1,0 +1,222 @@
+# ============================================================
+# EnterpriseDocsWorkflow 配置文件
+# ============================================================
+# 功能：处理企事业单位的文档内容，构建知识库，输出要求文件
+# ============================================================
+
+workflow:
+  name: "EnterpriseDocsWorkflow"
+  version: "1.0"
+  description: "企业文档处理：会议纪要整理、表格对比、报告生成、PPT汇报"
+
+# ============================================================
+# 触发条件
+# ============================================================
+triggers:
+  - keyword: "会议纪要"
+  - keyword: "企业报告"
+  - keyword: "表格对比"
+  - keyword: "研究报告"
+  - keyword: "汇报PPT"
+  - keyword: "市场分析"
+  intent: "用户需要处理企业会议、表格、报告或生成汇报材料"
+
+# ============================================================
+# 经典场景
+# ============================================================
+scenarios:
+  - id: "scenario-a"
+    name: "会议纪要整理"
+    input: "会议纪要 + 重要性参考文档"
+    output: "整理后的纪要 + 可成长式知识库"
+  - id: "scenario-b"
+    name: "多表格对比分析"
+    input: "10+表格 + 市场分析材料"
+    output: "对比报告 + 可视化图表 + 知识库"
+  - id: "scenario-c"
+    name: "汇报材料生成"
+    input: "会议纪要 + 表格 + 分析结果"
+    output: "研究报告 + 汇报PPT + 知识库"
+
+# ============================================================
+# 步骤定义
+# ============================================================
+steps:
+  - id: "step-0"
+    name: "工作区初始化"
+    type: "scheduler"
+    description: "创建 WORKSPACE/{ProjectName}/ 及 Agent 子目录"
+    output: |
+      WORKSPACE/{ProjectName}/
+      ├── doc-content-analysis/
+      ├── excel-master/
+      ├── ppt-master/
+      └── knowledge-builder/
+
+  - id: "step-1"
+    name: "内容提取"
+    agent: "doc-content-analysis"
+    input: "WORKSPACE/{ProjectName}/doc-content-analysis/input/"
+    output: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/"
+    key_outputs:
+      - "manifest.json"
+      - "summary.json"
+    description: "提取会议纪要、报告内容"
+    standalone_command: |
+      python ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py input.docx
+
+  - id: "step-2"
+    name: "表格数据对比"
+    agent: "excel-master"
+    input: "WORKSPACE/{ProjectName}/excel-master/input/"
+    output: "WORKSPACE/{ProjectName}/excel-master/output/"
+    substeps:
+      - name: "多表格智能对比"
+        skill: "excel_compare"
+        description: "对比多表格数据，识别差异和趋势"
+      - name: "可视化图表生成"
+        skill: "excel_chart"
+        command: |
+          python ComponentAgents/excel-master-main/skills/excel_chart/scripts/generate_chart.py data.xlsx
+      - name: "数据分析"
+        skill: "excel_analysis"
+        command: |
+          python ComponentAgents/excel-master-main/skills/excel_analysis/scripts/analysis.py data.xlsx
+    description: "智能对比、图表生成、数据分析"
+    standalone_commands:
+      compare: "excel_compare skill"
+      chart: "python ComponentAgents/excel-master-main/skills/excel_chart/scripts/generate_chart.py data.xlsx"
+      analysis: "python ComponentAgents/excel-master-main/skills/excel_analysis/scripts/analysis.py data.xlsx"
+
+  - id: "step-3"
+    name: "研究报告生成"
+    agent: "doc-form-master"
+    input: "Step-1 + Step-2 的分析结果"
+    output: "WORKSPACE/{ProjectName}/doc-form-master/output/"
+    substeps:
+      - name: "报告内容整合"
+        description: "汇总会议纪要 + 表格分析结果"
+      - name: "格式化输出"
+        skill: "report-generator"
+        command: |
+          python ComponentAgents/doc-form-master-main/SKILLS/report-generator/scripts/generate_report.py
+    description: "生成结构化研究报告"
+
+  - id: "step-4"
+    name: "汇报PPT生成"
+    agent: "ppt-master"
+    input: "Step-3 的研究报告 + 关键数据"
+    output: "WORKSPACE/{ProjectName}/ppt-master/output/"
+    description: "自动化生成汇报演示文稿"
+    standalone_command: |
+      # 调用 ppt-master-main 的 SKILL.md 流程
+      python ComponentAgents/ppt-master-main/skills/ppt-master/SKILL.md
+
+  - id: "step-5"
+    name: "知识库构建"
+    agent: "KnowledgeBuilderWorkflow"
+    input: "所有处理后的材料"
+    output: "knowledge-base/"
+    description: "调用KnowledgeBuilderWorkflow构建可成长式知识库"
+
+# ============================================================
+# 数据流
+# ============================================================
+dataflow: |
+  会议纪要/报告/表格
+      ↓
+  [doc-content-analysis] → 内容提取
+      ↓
+  [excel-master] → 表格对比 + 图表
+      ↓
+  [doc-form-master] → 研究报告
+      ↓
+  [ppt-master] → 汇报PPT
+      ↓
+  [KnowledgeBuilderWorkflow] → 知识库
+      ↓
+  输出到工作区
+
+# ============================================================
+# 状态检查
+# ============================================================
+status_checks:
+  - condition: "Step-1 manifest.json 中 status == 'completed'"
+    action: "继续 Step-2"
+  - condition: "Step-2 所有SKILL完成"
+    action: "继续 Step-3"
+  - condition: "Step-3 报告生成完成"
+    action: "继续 Step-4"
+  - condition: "Step-4 PPT生成完成"
+    action: "继续 Step-5"
+
+# ============================================================
+# 独立Agent调用点汇总
+# ============================================================
+standalone_agents:
+  - agent: "doc-content-analysis"
+    purpose: "提取会议纪要内容"
+    command: |
+      python ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py input.docx
+  - agent: "excel-master + excel_compare"
+    purpose: "多表格对比"
+    command: "excel_compare skill"
+  - agent: "excel-master + excel_chart"
+    purpose: "生成可视化图表"
+    command: |
+      python ComponentAgents/excel-master-main/skills/excel_chart/scripts/generate_chart.py data.xlsx
+  - agent: "excel-master + excel_analysis"
+    purpose: "数据分析"
+    command: |
+      python ComponentAgents/excel-master-main/skills/excel_analysis/scripts/analysis.py data.xlsx
+  - agent: "doc-form-master + report-generator"
+    purpose: "生成研究报告"
+    command: |
+      python ComponentAgents/doc-form-master-main/SKILLS/report-generator/scripts/generate_report.py
+  - agent: "ppt-master"
+    purpose: "生成汇报PPT"
+    command: |
+      python ComponentAgents/ppt-master-main/skills/ppt-master/SKILL.md
+  - agent: "KnowledgeBuilderWorkflow"
+    purpose: "构建知识库"
+    command: |
+      python Workflows/config/KnowledgeBuilderWorkflow.yaml
+
+# ============================================================
+# 输出位置
+# ============================================================
+outputs:
+  - path: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/"
+    description: "内容提取结果"
+  - path: "WORKSPACE/{ProjectName}/excel-master/output/"
+    description: "表格对比、图表、分析结果"
+  - path: "WORKSPACE/{ProjectName}/doc-form-master/output/"
+    description: "研究报告（DOCX）"
+  - path: "WORKSPACE/{ProjectName}/ppt-master/output/"
+    description: "汇报PPT（PPTX）"
+  - path: "knowledge-base/"
+    description: "知识库"
+
+# ============================================================
+# 调度代码示例
+# ============================================================
+scheduler_example: |
+  def execute_enterprise_docs(project_name, materials, tables):
+      ws = Path(f"WORKSPACE/{project_name}")
+      
+      # Step 1: 内容提取
+      for mat in materials:
+          subprocess.run(["python", "ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py", str(mat)])
+      
+      # Step 2: 表格对比
+      for tbl in tables:
+          subprocess.run(["python", "ComponentAgents/excel-master-main/skills/excel_chart/scripts/generate_chart.py", str(tbl)])
+      
+      # Step 3: 报告生成
+      subprocess.run(["python", "ComponentAgents/doc-form-master-main/SKILLS/report-generator/scripts/generate_report.py"])
+      
+      # Step 4: PPT生成
+      # 调用 ppt-master 流程
+      
+      # Step 5: 知识库
+      subprocess.run(["python", "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py", "update", "knowledge-base/", ...])

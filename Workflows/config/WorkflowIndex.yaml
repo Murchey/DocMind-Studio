@@ -1,0 +1,111 @@
+# ============================================================
+# WorkflowIndex 工作流索引
+# ============================================================
+# 功能：统一管理所有工作流配置，提供调度入口
+# ============================================================
+
+index:
+  version: "1.0"
+  description: "DocMind-Studio 工作流配置索引"
+
+# ============================================================
+# 可用工作流列表
+# ============================================================
+workflows:
+  - name: "KnowledgeBuilderWorkflow"
+    file: "KnowledgeBuilderWorkflow.yaml"
+    description: "文档→结构化知识库，支持增量更新"
+    priority: "P0"
+    status: "已实现"
+    
+  - name: "AcademicDocsWorkflow"
+    file: "AcademicDocsWorkflow.yaml"
+    description: "学术文档处理：论文评审、格式更改、知识库构建"
+    priority: "P0"
+    status: "已定义"
+    
+  - name: "EnterpriseDocsWorkflow"
+    file: "EnterpriseDocsWorkflow.yaml"
+    description: "企业文档处理：会议纪要、表格对比、报告生成、PPT汇报"
+    priority: "P0"
+    status: "已定义"
+    
+  - name: "CompetitionWorkflow"
+    file: "CompetitionWorkflow.yaml"
+    description: "竞赛资源处理：资源解压、项目书解析、答辩PPT生成、知识库构建"
+    priority: "P1"
+    status: "已定义"
+
+# ============================================================
+# 调度入口
+# ============================================================
+scheduler:
+  entry_point: "AGENTS.md"
+  description: |
+    AGENTS.md 根据用户需求匹配 Workflow
+    读取对应 YAML 配置文件执行工作流
+
+# ============================================================
+# 工作流选择逻辑
+# ============================================================
+selection_logic: |
+  if 用户需求包含 ["知识库", "结构化", "批量处理", "增量更新"]:
+      → KnowledgeBuilderWorkflow
+      
+  elif 用户需求包含 ["论文", "学术", "开题报告", "答辩", "评审", "格式化"]:
+      → AcademicDocsWorkflow
+      
+  elif 用户需求包含 ["会议纪要", "企业报告", "表格对比", "研究报告", "汇报PPT"]:
+      → EnterpriseDocsWorkflow
+      
+  elif 用户需求包含 ["竞赛", "项目书", "资源包", "ZIP", "7Z"]:
+      → CompetitionWorkflow
+      
+  else:
+      → 根据关键词匹配或询问用户
+
+# ============================================================
+# 配置文件位置
+# ============================================================
+config_location: "Workflows/config/"
+
+# ============================================================
+# 依赖关系
+# ============================================================
+dependencies:
+  KnowledgeBuilderWorkflow:
+    agents: ["doc-content-analysis", "ppt-deep-summary", "knowledge-builder"]
+    
+  AcademicDocsWorkflow:
+    agents: ["doc-content-analysis", "phd-research-agent", "doc-form-master"]
+    optional: ["KnowledgeBuilderWorkflow"]
+    
+  EnterpriseDocsWorkflow:
+    agents: ["doc-content-analysis", "excel-master", "ppt-master", "doc-form-master"]
+    optional: ["KnowledgeBuilderWorkflow"]
+    
+  CompetitionWorkflow:
+    agents: ["doc-content-analysis", "ppt-master"]
+    optional: ["KnowledgeBuilderWorkflow"]
+
+# ============================================================
+# 快速参考
+# ============================================================
+quick_reference:
+  - scenario: "20+论文材料→答辩PPT+知识库"
+    workflow: "AcademicDocsWorkflow + KnowledgeBuilderWorkflow"
+    
+  - scenario: "10+表格+会议纪要→研究报告+汇报PPT"
+    workflow: "EnterpriseDocsWorkflow + KnowledgeBuilderWorkflow"
+    
+  - scenario: "竞赛资源包→完整答辩材料+知识库"
+    workflow: "CompetitionWorkflow + KnowledgeBuilderWorkflow"
+    
+  - scenario: "单文档提取内容"
+    workflow: "独立调用 doc-content-analysis"
+    
+  - scenario: "MD→格式化DOCX"
+    workflow: "独立调用 doc-form-master"
+    
+  - scenario: "多表格智能对比"
+    workflow: "独立调用 excel-master"

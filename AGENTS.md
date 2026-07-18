@@ -84,9 +84,10 @@ DocMind-Studio/                        # 根目录
 
 | Workflow | 路径 | 说明 |
 |----------|------|------|
-| KnowledgeBuilder | `Workflows/KnowledgeBuilderWorkflow.md` | 文档 → 结构化知识库（JSON） |
-| AcademicDocs | `Workflows/AcdamicDocsWorkflow.md` | 学术文档处理 |
-| EnterpriseDocs | `Workflows/EnterpriseDocsWorkflow.md` | 企业文档处理 |
+| KnowledgeBuilder | `Workflows/KnowledgeBuilderWorkflow.md` | 文档 → 结构化知识库（JSON），支持增量更新 |
+| AcademicDocs | `Workflows/AcdamicDocsWorkflow.md` | 学术文档处理：论文评审、格式更改、知识库构建 |
+| EnterpriseDocs | `Workflows/EnterpriseDocsWorkflow.md` | 企业文档处理：会议纪要、表格对比、报告生成、PPT汇报 |
+| Competition | `Workflows/CompetitionWorkflow.md` | 竞赛资源处理：资源解压、项目书解析、答辩PPT生成、知识库构建 |
 
 ---
 
@@ -221,10 +222,74 @@ subprocess.run([
 ```
 用户文档 → EnterpriseDocsWorkflow
   Step 0: 创建 WORKSPACE/{ProjectName}/
-  输出：WORKSPACE/{ProjectName}/doc-form-master/output/
+  Step 1: doc-content-analysis（内容提取）
+  Step 2: excel-master（表格对比 + 图表）
+  Step 3: doc-form-master（研究报告）
+  Step 4: ppt-master（汇报PPT）
+  Step 5: KnowledgeBuilderWorkflow（知识库构建）
+  输出：WORKSPACE/{ProjectName}/ppt-master/output/ + knowledge-base/
 ```
 
-### 5. PPT 续写
+**触发关键词**：会议纪要、企业报告、表格对比、研究报告、汇报PPT、市场分析
+
+**调度代码示例**：
+```python
+def execute_enterprise_docs(project_name: str, materials: list, tables: list):
+    """执行EnterpriseDocs工作流"""
+    from pathlib import Path
+    import subprocess
+    
+    ws = Path(f"WORKSPACE/{project_name}")
+    
+    # Step 1: 内容提取
+    for mat in materials:
+        subprocess.run([
+            "python", "ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py",
+            str(mat)
+        ], check=True)
+    
+    # Step 2: 表格对比
+    for tbl in tables:
+        subprocess.run([
+            "python", "ComponentAgents/excel-master-main/skills/excel_chart/scripts/generate_chart.py",
+            str(tbl)
+        ], check=True)
+    
+    # Step 3-5: 报告、PPT、知识库...
+```
+
+### 5. 竞赛资源处理
+
+当用户需要处理竞赛资源包时：
+
+```
+用户文档 → CompetitionWorkflow
+  Step 0: 创建 WORKSPACE/{ProjectName}/
+  Step 1: 解压 ZIP/7Z 资源包（外部处理）
+  Step 2: doc-content-analysis（项目书/代码提取）
+  Step 3: ppt-master（答辩PPT生成）
+  Step 4: KnowledgeBuilderWorkflow（知识库构建）
+  输出：WORKSPACE/{ProjectName}/ppt-master/output/ + knowledge-base/
+```
+
+**触发关键词**：竞赛、答辩、项目书、资源包、ZIP、7Z
+
+**调度代码示例**：
+```python
+def execute_competition(project_name: str, zip_file: str):
+    """执行CompetitionWorkflow"""
+    from pathlib import Path
+    import shutil, subprocess
+    
+    ws = Path(f"WORKSPACE/{project_name}")
+    
+    # Step 1: 解压（外部处理示例）
+    # shutil.unpack_archive(zip_file, ws/"input/")
+    
+    # Step 2-4: 提取、PPT、知识库...
+```
+
+### 6. PPT 续写
 
 当用户需要继续完成外部半完成的 PPT 时：
 
@@ -433,15 +498,57 @@ def collect_ppt_master_output(project_name: str):
 ## 使用方式
 
 1. 用户描述需求
-2. AGENTS.md 根据需求匹配 Workflow
+2. AGENTS.md 根据需求匹配 Workflow（参考 `Workflows/config/WorkflowIndex.yaml`）
 3. **创建项目工作区** `WORKSPACE/{ProjectName}/` 及 Agent 子目录
-4. **初始化进度追踪**（使用 ProgressTracker）
+4. **初始化进度追踪**（使用 ProgressTracker 或工作流执行器）
 5. 复制用户文档到 Agent 的 `input/`
-6. 调用 AGENT，传入工作区路径
+6. 调用 AGENT，传入工作区绝对路径
 7. AGENT 加载 SKILL 执行具体任务
 8. **检查 Agent 状态**（check_agent_status）
 9. **传递输出到下游**（pass_output_to_downstream）
 10. **任务完成时标记完成**（tracker.complete_task）
+
+---
+
+## 工作流执行器集成（新增）
+
+AGENTS.md 可通过 `Workflows/executor/` 执行完整工作流：
+
+```python
+from Workflows.executor import WorkflowExecutor
+
+def dispatch_workflow(user_requirement: str, project_name: str):
+    """根据需求匹配并执行工作流"""
+    root = Path(__file__).parent
+    
+    # 1. 匹配工作流配置
+    workflow_config = None
+    if any(kw in user_requirement for kw in ["知识库", "结构化", "增量更新"]):
+        workflow_config = "Workflows/config/KnowledgeBuilderWorkflow.yaml"
+    elif any(kw in user_requirement for kw in ["论文", "学术", "评审", "格式化"]):
+        workflow_config = "Workflows/config/AcademicDocsWorkflow.yaml"
+    elif any(kw in user_requirement for kw in ["会议纪要", "企业报告", "表格对比"]):
+        workflow_config = "Workflows/config/EnterpriseDocsWorkflow.yaml"
+    elif any(kw in user_requirement for kw in ["竞赛", "项目书", "资源包"]):
+        workflow_config = "Workflows/config/CompetitionWorkflow.yaml"
+    
+    if not workflow_config:
+        print("未匹配到工作流，使用传统调度方式")
+        return
+    
+    # 2. 执行工作流
+    executor = WorkflowExecutor(project_root=str(root))
+    result = executor.execute(workflow_config, project_name)
+    
+    if result["success"]:
+        print(f"工作流执行成功: {result['completed_steps']}")
+    else:
+        print(f"工作流执行失败: {result['error']}")
+```
+
+**工作流配置文件位置**：`Workflows/config/*.yaml`
+
+**执行器状态文件**：`WORKSPACE/{ProjectName}/.workflow_state.json`（Dashboard 自动监听）
 
 ### 进度更新示例
 

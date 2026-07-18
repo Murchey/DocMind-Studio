@@ -1,0 +1,220 @@
+# ============================================================
+# AcademicDocsWorkflow 配置文件
+# ============================================================
+# 功能：根据用户指令，帮助用户完成论文的评审、格式更改和数据分析补充
+# ============================================================
+
+workflow:
+  name: "AcademicDocsWorkflow"
+  version: "1.0"
+  description: "学术文档处理：论文评审、格式更改、知识库构建"
+
+# ============================================================
+# 触发条件
+# ============================================================
+triggers:
+  - keyword: "论文"
+  - keyword: "学术"
+  - keyword: "开题报告"
+  - keyword: "答辩"
+  - keyword: "格式化"
+  - keyword: "评审"
+  - keyword: "修改建议"
+  intent: "用户需要处理学术论文、开题报告、格式化或评审"
+
+# ============================================================
+# 经典场景
+# ============================================================
+scenarios:
+  - id: "scenario-a"
+    name: "开题报告 → 论文大纲"
+    input: "开题报告 + 相关论文材料 + 核心观点"
+    output: "论文大纲 + 逐句解读 + 可成长式知识库"
+  - id: "scenario-b"
+    name: "论文草稿 → 评审建议"
+    input: "论文大纲 + 开题报告 + 论文idea"
+    output: "idea评测 + 修改建议 + 调整后大纲"
+  - id: "scenario-c"
+    name: "材料 → 格式化论文"
+    input: "零散研究材料 + 用户格式要求"
+    output: "格式化DOCX + PDF"
+
+# ============================================================
+# 步骤定义
+# ============================================================
+steps:
+  - id: "step-0"
+    name: "工作区初始化"
+    type: "scheduler"
+    description: "创建 WORKSPACE/{ProjectName}/ 及 Agent 子目录"
+    output: |
+      WORKSPACE/{ProjectName}/
+      ├── doc-content-analysis/
+      ├── phd-research-agent/
+      ├── doc-form-master/
+      └── knowledge-builder/（可选）
+
+  - id: "step-1"
+    name: "材料提取"
+    agent: "doc-content-analysis"
+    input: "WORKSPACE/{ProjectName}/doc-content-analysis/input/"
+    output: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/"
+    key_outputs:
+      - "manifest.json"
+      - "summary.json"
+    description: "提取开题报告、论文材料、参考文献内容"
+    standalone_command: |
+      python ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py input.docx
+
+  - id: "step-2"
+    name: "论文评审"
+    agent: "phd-research-agent"
+    input: "Step-1 的 summary/*.md"
+    output: "WORKSPACE/{ProjectName}/phd-research-agent/summary/"
+    task_routing:
+      - condition: "包含研究想法"
+        skill: "idea-evaluator"
+        command: |
+          python ComponentAgents/phd-research-agent/SKILLS/idea-evaluator/scripts/idea_evaluator.py idea.md
+      - condition: "包含论文草稿需审阅"
+        skill: "pre-submission-reviewer"
+        command: |
+          python ComponentAgents/phd-research-agent/SKILLS/pre-submission-reviewer/scripts/reviewer.py draft.md
+      - condition: "需要起草Introduction"
+        skill: "intro-drafter"
+        command: |
+          python ComponentAgents/phd-research-agent/SKILLS/intro-drafter/scripts/drafter.py research_info.md
+    description: "idea评测、论文审阅、Introduction起草"
+
+  - id: "step-3"
+    name: "格式标准化"
+    agent: "doc-form-master"
+    input: "Step-2 的评审结果或用户MD草稿"
+    output: "WORKSPACE/{ProjectName}/doc-form-master/output/"
+    substeps:
+      - name: "MD→DOCX"
+        skill: "markdown-converter"
+        command: |
+          python ComponentAgents/doc-form-master-main/SKILLS/markdown-converter/scripts/md_converter.py input.md
+      - name: "格式检测与标准化"
+        skill: "format-normalizer"
+        command: |
+          python ComponentAgents/doc-form-master-main/SKILLS/format-normalizer/scripts/normalizer.py input.docx
+      - name: "公式保护"
+        skill: "formula-protection"
+      - name: "页边距/字体调整"
+        skills: ["margin-manager", "font-manager"]
+      - name: "PDF导出"
+        skill: "pdf-export"
+        command: |
+          python ComponentAgents/doc-form-master-main/SKILLS/pdf-export/scripts/pdf_exporter.py input.docx
+    description: "格式化DOCX + PDF"
+
+  - id: "step-4"
+    name: "知识库构建（可选）"
+    agent: "KnowledgeBuilderWorkflow"
+    input: "所有处理后的材料"
+    output: "knowledge-base/"
+    condition: "用户要求构建知识库或材料超过5份"
+    description: "调用KnowledgeBuilderWorkflow构建可成长式知识库"
+
+# ============================================================
+# 数据流
+# ============================================================
+dataflow: |
+  用户需求 + 材料
+      ↓
+  [需求分析]
+      ↓
+  [doc-content-analysis] → 材料提取
+      ↓
+  [phd-research-agent] → 论文评审
+      ↓
+  [doc-form-master] → 格式标准化
+      ↓
+  [KnowledgeBuilderWorkflow]（可选）→ 知识库
+      ↓
+  输出到工作区
+
+# ============================================================
+# 状态检查
+# ============================================================
+status_checks:
+  - condition: "Step-1 manifest.json 中 status == 'completed'"
+    action: "继续 Step-2"
+  - condition: "Step-2 manifest.json 中 status == 'completed'"
+    action: "继续 Step-3"
+  - condition: "Step-3 manifest.json 中 status == 'completed'"
+    action: "完成或进入 Step-4"
+
+# ============================================================
+# 独立Agent调用点汇总
+# ============================================================
+standalone_agents:
+  - agent: "doc-content-analysis"
+    purpose: "提取单个材料"
+    command: |
+      python ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py input.docx
+  - agent: "phd-research-agent + idea-evaluator"
+    purpose: "评估研究想法"
+    command: |
+      python ComponentAgents/phd-research-agent/SKILLS/idea-evaluator/scripts/idea_evaluator.py idea.md
+  - agent: "phd-research-agent + pre-submission-reviewer"
+    purpose: "论文审阅"
+    command: |
+      python ComponentAgents/phd-research-agent/SKILLS/pre-submission-reviewer/scripts/reviewer.py draft.md
+  - agent: "phd-research-agent + intro-drafter"
+    purpose: "起草Introduction"
+    command: |
+      python ComponentAgents/phd-research-agent/SKILLS/intro-drafter/scripts/drafter.py research_info.md
+  - agent: "doc-form-master + markdown-converter"
+    purpose: "MD→DOCX"
+    command: |
+      python ComponentAgents/doc-form-master-main/SKILLS/markdown-converter/scripts/md_converter.py input.md
+  - agent: "doc-form-master + format-normalizer"
+    purpose: "格式标准化"
+    command: |
+      python ComponentAgents/doc-form-master-main/SKILLS/format-normalizer/scripts/normalizer.py input.docx
+  - agent: "doc-form-master + pdf-export"
+    purpose: "导出PDF"
+    command: |
+      python ComponentAgents/doc-form-master-main/SKILLS/pdf-export/scripts/pdf_exporter.py input.docx
+  - agent: "KnowledgeBuilderWorkflow"
+    purpose: "构建知识库"
+    command: |
+      python Workflows/config/KnowledgeBuilderWorkflow.yaml
+
+# ============================================================
+# 输出位置
+# ============================================================
+outputs:
+  - path: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/"
+    description: "材料提取结果"
+  - path: "WORKSPACE/{ProjectName}/phd-research-agent/summary/"
+    description: "评审/写作建议（idea_result.json, review_result.json, intro_outline.json）"
+  - path: "WORKSPACE/{ProjectName}/doc-form-master/output/"
+    description: "格式化DOCX/PDF"
+  - path: "knowledge-base/"
+    description: "知识库（可选）"
+
+# ============================================================
+# 调度代码示例
+# ============================================================
+scheduler_example: |
+  def execute_academic_docs(project_name, user_requirement, materials):
+      ws = Path(f"WORKSPACE/{project_name}")
+      
+      # Step 1: 材料提取
+      for mat in materials:
+          subprocess.run(["python", "ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py", str(mat)])
+      
+      # Step 2: 论文评审
+      if "评审" in user_requirement:
+          subprocess.run(["python", "ComponentAgents/phd-research-agent/SKILLS/pre-submission-reviewer/scripts/reviewer.py", str(ws/"doc-content-analysis/summary/draft.md")])
+      
+      # Step 3: 格式标准化
+      subprocess.run(["python", "ComponentAgents/doc-form-master-main/SKILLS/markdown-converter/scripts/md_converter.py", str(ws/"phd-research-agent/summary/review_result.md")])
+      
+      # Step 4: 知识库（可选）
+      if len(materials) > 5:
+          subprocess.run(["python", "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py", "update", "knowledge-base/", ...])

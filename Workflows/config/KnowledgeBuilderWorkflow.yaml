@@ -1,0 +1,139 @@
+# ============================================================
+# KnowledgeBuilderWorkflow 配置文件
+# ============================================================
+# 功能：将文档转换为结构化知识库，支持增量更新
+# ============================================================
+
+workflow:
+  name: "KnowledgeBuilderWorkflow"
+  version: "1.0"
+  description: "文档→结构化知识库（JSON），支持增量更新"
+
+# ============================================================
+# 触发条件
+# ============================================================
+triggers:
+  - keyword: "知识库"
+  - keyword: "结构化"
+  - keyword: "批量处理"
+  - keyword: "关键词提取"
+  - keyword: "概念索引"
+  - keyword: "增量更新"
+  intent: "用户需要将多个文档转换为可查询的结构化知识库"
+
+# ============================================================
+# 步骤定义
+# ============================================================
+steps:
+  - id: "step-0"
+    name: "工作区初始化"
+    type: "scheduler"
+    description: "创建 WORKSPACE/{ProjectName}/ 及 Agent 子目录，初始化进度追踪"
+    output: "WORKSPACE/{ProjectName}/"
+
+  - id: "step-1"
+    name: "文档内容提取"
+    agent: "doc-content-analysis"
+    input: "WORKSPACE/{ProjectName}/doc-content-analysis/input/"
+    output: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/"
+    key_outputs:
+      - "manifest.json"
+      - "summary.json（含 content_hash）"
+    description: |
+      调用 doc-convertor 处理 DOC/PDF
+      调用 img-reader 提取图片
+      AI 总结生成 summary.json + summary.md
+      输出 manifest.json（含 content_hash）
+
+  - id: "step-2"
+    name: "知识库构建/更新"
+    agent: "knowledge-builder"
+    input: "Step-1 的 manifest.json"
+    output: "knowledge-base/"
+    condition: "Step-1 的 manifest.json 中 status == 'completed'"
+    modes:
+      - name: "init"
+        description: "首次全量构建"
+        command: |
+          python ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py init \
+            knowledge-base/ \
+            workspace/summary/ \
+            workspace/summary/manifest.json
+      - name: "update"
+        description: "增量更新（推荐）"
+        command: |
+          python ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py update \
+            knowledge-base/ \
+            workspace/summary/ \
+            workspace/summary/manifest.json
+      - name: "status"
+        description: "状态查询"
+        command: |
+          python ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py status \
+            knowledge-base/ \
+            workspace/summary/ \
+            workspace/summary/manifest.json
+
+# ============================================================
+# 数据流
+# ============================================================
+dataflow: |
+  用户文档
+      ↓
+  [doc-content-analysis]
+      ↓ manifest.json + summary.json（含 content_hash）
+  [knowledge-builder]
+      ↓
+  knowledge-base/（含 .kb_state.json）
+
+# ============================================================
+# 状态检查
+# ============================================================
+status_checks:
+  - condition: "manifest.json 中 status == 'completed'"
+    action: "继续下一步"
+  - condition: "manifest.json 中 status == 'failed'"
+    action: "终止或跳过"
+  - condition: "manifest.json 中 status == 'empty'"
+    action: "跳过"
+  - condition: ".kb_state.json 不存在"
+    action: "update 模式自动回退到 init"
+
+# ============================================================
+# 错误处理
+# ============================================================
+error_handling:
+  - scenario: "manifest 状态不是 completed"
+    action: "报错退出"
+  - scenario: ".kb_state.json 不存在时执行 update"
+    action: "自动回退到 init"
+  - scenario: "无差异时执行 update"
+    action: "输出提示并跳过"
+
+# ============================================================
+# 独立Agent调用点
+# ============================================================
+standalone_agents:
+  - agent: "doc-content-analysis"
+    purpose: "单文档提取"
+    command: |
+      python ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py input.docx
+  - agent: "ppt-deep-summary"
+    purpose: "单PPT提取"
+    command: |
+      python ComponentAgents/ppt-deep-summary-main/SKILLS/PPTParser/scripts/ppt_parser.py input.pptx
+  - agent: "knowledge-builder"
+    purpose: "知识库 init/update/status"
+    commands:
+      init: "kb_manager.py init knowledge-base/ workspace/summary/ manifest.json"
+      update: "kb_manager.py update knowledge-base/ workspace/summary/ manifest.json"
+      status: "kb_manager.py status knowledge-base/ workspace/summary/ manifest.json"
+
+# ============================================================
+# 输出位置
+# ============================================================
+outputs:
+  - path: "knowledge-base/"
+    description: "结构化知识库（含 .kb_state.json, kb-manifest.json, documents/, keywords/, concepts/, toc.json）"
+  - path: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/"
+    description: "原始提取结果（manifest.json + summary/*.json）"

@@ -1,0 +1,152 @@
+# ============================================================
+# CompetitionWorkflow 配置文件
+# ============================================================
+# 功能：处理竞赛资源包，解析代码和项目书，完成竞赛PPT和知识库构建
+# ============================================================
+
+workflow:
+  name: "CompetitionWorkflow"
+  version: "1.0"
+  description: "竞赛资源处理：资源解压、项目书解析、答辩PPT生成、知识库构建"
+
+# ============================================================
+# 触发条件
+# ============================================================
+triggers:
+  - keyword: "竞赛"
+  - keyword: "答辩"
+  - keyword: "项目书"
+  - keyword: "资源包"
+  - keyword: "ZIP"
+  - keyword: "7Z"
+  intent: "用户需要处理竞赛资源包，生成答辩PPT和知识库"
+
+# ============================================================
+# 步骤定义
+# ============================================================
+steps:
+  - id: "step-0"
+    name: "工作区初始化"
+    type: "scheduler"
+    description: "创建 WORKSPACE/{ProjectName}/ 及 Agent 子目录"
+    output: |
+      WORKSPACE/{ProjectName}/
+      ├── doc-content-analysis/
+      ├── ppt-master/
+      └── knowledge-builder/
+
+  - id: "step-1"
+    name: "竞赛资源解压与解析"
+    type: "preprocessing"
+    input: "用户上传的 ZIP/7Z 资源包"
+    output: "WORKSPACE/{ProjectName}/input/"
+    description: |
+      解压 ZIP/7Z 格式资源包
+      提取项目书、代码、文档到 input/ 目录
+    note: "此步骤由调度器或外部脚本完成，工作流从解压后的文件开始"
+
+  - id: "step-2"
+    name: "内容提取"
+    agent: "doc-content-analysis"
+    input: "WORKSPACE/{ProjectName}/doc-content-analysis/input/"
+    output: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/"
+    key_outputs:
+      - "manifest.json"
+      - "summary.json"
+    description: "提取项目书、代码注释、文档内容"
+    standalone_command: |
+      python ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py input.docx
+
+  - id: "step-3"
+    name: "竞赛PPT构建"
+    agent: "ppt-master"
+    input: "Step-2 的提取结果 + 项目书核心内容"
+    output: "WORKSPACE/{ProjectName}/ppt-master/output/"
+    description: "自动化生成答辩演示文稿"
+    substeps:
+      - name: "内容结构化"
+        description: "从项目书中提取背景、方法、结果、创新点"
+      - name: "PPT生成"
+        description: "调用 ppt-master 生成结构化PPT"
+    standalone_command: |
+      python ComponentAgents/ppt-master-main/skills/ppt-master/SKILL.md
+
+  - id: "step-4"
+    name: "知识库构建"
+    agent: "KnowledgeBuilderWorkflow"
+    input: "所有竞赛材料"
+    output: "knowledge-base/"
+    description: "保存竞赛资料到可成长式知识库"
+
+# ============================================================
+# 数据流
+# ============================================================
+dataflow: |
+  竞赛资源包（ZIP/7Z）
+      ↓
+  [解压] → 项目书 + 代码 + 文档
+      ↓
+  [doc-content-analysis] → 内容提取
+      ↓
+  [ppt-master] → 答辩PPT
+      ↓
+  [KnowledgeBuilderWorkflow] → 知识库
+      ↓
+  输出到工作区
+
+# ============================================================
+# 状态检查
+# ============================================================
+status_checks:
+  - condition: "Step-2 manifest.json 中 status == 'completed'"
+    action: "继续 Step-3"
+  - condition: "Step-3 PPT生成完成"
+    action: "继续 Step-4"
+
+# ============================================================
+# 独立Agent调用点汇总
+# ============================================================
+standalone_agents:
+  - agent: "doc-content-analysis"
+    purpose: "解析项目书/代码内容"
+    command: |
+      python ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py input.docx
+  - agent: "ppt-master"
+    purpose: "生成竞赛答辩PPT"
+    command: |
+      python ComponentAgents/ppt-master-main/skills/ppt-master/SKILL.md
+  - agent: "KnowledgeBuilderWorkflow"
+    purpose: "构建竞赛知识库"
+    command: |
+      python Workflows/config/KnowledgeBuilderWorkflow.yaml
+
+# ============================================================
+# 输出位置
+# ============================================================
+outputs:
+  - path: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/"
+    description: "项目书/代码提取结果"
+  - path: "WORKSPACE/{ProjectName}/ppt-master/output/"
+    description: "答辩PPT（PPTX）"
+  - path: "knowledge-base/"
+    description: "竞赛知识库"
+
+# ============================================================
+# 调度代码示例
+# ============================================================
+scheduler_example: |
+  def execute_competition(project_name, zip_file):
+      ws = Path(f"WORKSPACE/{project_name}")
+      
+      # Step 1: 解压资源包（外部处理）
+      # shutil.unpack_archive(zip_file, ws/"input/")
+      
+      # Step 2: 内容提取
+      for f in (ws/"input").glob("*.docx"):
+          subprocess.run(["python", "ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py", str(f)])
+      
+      # Step 3: PPT生成
+      subprocess.run(["python", "ComponentAgents/ppt-master-main/skills/ppt-master/SKILL.md"])
+      
+      # Step 4: 知识库
+      subprocess.run(["python", "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py", "update", "knowledge-base/", ...])

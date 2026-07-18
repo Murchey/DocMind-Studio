@@ -1395,6 +1395,13 @@ export class DashboardPanel {
       return emptyStatus;
     }
 
+    // 优先查找工作流执行器状态文件（.workflow_state.json）
+    const workflowStatePath = this.findWorkflowStateFile(rootPath);
+    if (workflowStatePath) {
+      return this.parseWorkflowState(workflowStatePath, rootPath);
+    }
+
+    // 回退到旧版进度文件
     const progressPath = this.findProgressFile(rootPath);
     if (!progressPath) {
       return emptyStatus;
@@ -1433,6 +1440,104 @@ export class DashboardPanel {
         steps: [],
         outputs: [],
         error: error instanceof Error ? error.message : 'Progress JSON parse failed'
+      };
+    }
+  }
+
+  /**
+   * 查找工作流执行器状态文件（.workflow_state.json）
+   */
+  private findWorkflowStateFile(rootPath: string): string | undefined {
+    const workspacePath = path.join(rootPath, 'WORKSPACE');
+    if (!fs.existsSync(workspacePath)) {
+      return undefined;
+    }
+
+    // 递归查找所有项目的 .workflow_state.json
+    const findStateFile = (dir: string, depth: number): string | undefined => {
+      if (depth < 0 || !fs.existsSync(dir)) {
+        return undefined;
+      }
+
+      for (const entry of this.readDirEntries(dir)) {
+        const fullPath = path.join(dir, entry.name);
+        if (entry.isFile() && entry.name === '.workflow_state.json') {
+          return fullPath;
+        }
+        if (entry.isDirectory()) {
+          const found = findStateFile(fullPath, depth - 1);
+          if (found) {
+            return found;
+          }
+        }
+      }
+      return undefined;
+    };
+
+    return findStateFile(workspacePath, 3);
+  }
+
+  /**
+   * 解析工作流执行器状态文件（.workflow_state.json）
+   */
+  private parseWorkflowState(statePath: string, rootPath: string): ProgressStatus {
+    try {
+      const raw = JSON.parse(this.readText(statePath)) as Record<string, unknown>;
+      
+      const completedSteps = (raw.completed_steps as string[]) || [];
+      const failedSteps = (raw.failed_steps as string[]) || [];
+      const currentStep = this.asString(raw.current_step);
+      
+      // 构建步骤列表
+      const steps: ProgressStep[] = [];
+      completedSteps.forEach((stepId: string) => {
+        steps.push({ id: stepId, name: stepId, status: 'completed' });
+      });
+      if (currentStep) {
+        steps.push({ id: currentStep, name: currentStep, status: 'running' });
+      }
+      failedSteps.forEach((stepId: string) => {
+        steps.push({ id: stepId, name: stepId, status: 'failed' });
+      });
+
+      // 计算进度百分比
+      const totalSteps = completedSteps.length + failedSteps.length + (currentStep ? 1 : 0);
+      const percent = totalSteps > 0 ? Math.floor((completedSteps.length / totalSteps) * 100) : 0;
+
+      // 确定状态
+      let status = 'running';
+      if (failedSteps.length > 0) {
+        status = 'failed';
+      } else if (!currentStep && completedSteps.length > 0) {
+        status = 'completed';
+      }
+
+      // 提取项目名（从路径推断）
+      const projectMatch = statePath.match(/WORKSPACE[\\\/]([^\\\/]+)[\\\/]\.workflow_state\.json/);
+      const projectName = projectMatch ? projectMatch[1] : undefined;
+
+      return {
+        exists: true,
+        path: statePath,
+        project: projectName,
+        workflow: this.asString(raw.workflow) || 'Workflow',
+        status,
+        percent: this.clampPercent(percent),
+        updatedAt: this.asString(raw.updated_at) || this.asString(raw.updatedAt),
+        currentStep: currentStep || undefined,
+        steps,
+        outputs: [],
+        message: currentStep ? `执行中: ${currentStep}` : (status === 'completed' ? '工作流执行完成' : undefined)
+      };
+    } catch (error) {
+      return {
+        exists: true,
+        path: statePath,
+        status: 'invalid',
+        percent: 0,
+        steps: [],
+        outputs: [],
+        error: error instanceof Error ? error.message : 'Workflow state JSON parse failed'
       };
     }
   }
