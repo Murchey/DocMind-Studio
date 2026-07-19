@@ -1,0 +1,171 @@
+{
+  "presentation_title": "2024年度产品战略规划",
+  "slide_count": 8,
+  "slides": [
+    {
+      "slide_number": 1,
+      "title": "2024年度产品战略规划",
+      "layout_name": "Title Slide",
+      "texts": [
+        {"level": 0, "text": "产品部 · 战略规划组"},
+        {"level": 0, "text": "2024年1月"}
+      ],
+      "notes": ["本次汇报重点展示2024年产品发展方向和关键举措"],
+      "tables": [],
+      "images": [],
+      "hyperlinks": [],
+      "charts": [],
+      "raw_markdown": "# Slide 1\n\n**Layout:** Title Slide\n\n## 2024年度产品战略规划\n\n产品部 · 战略规划组\n2024年1月\n"
+    },
+    {
+      "slide_number": 2,
+      "title": "目录",
+      "layout_name": "Title and Content",
+      "texts": [
+        {"level": 0, "text": "市场环境分析"},
+        {"level": 0, "text": "2023年业绩回顾"},
+        {"level": 0, "text": "2024年战略目标"},
+        {"level": 0, "text": "关键举措与行动计划"},
+        {"level": 0, "text": "资源需求与预算"}
+      ],
+      "notes": [],
+      "tables": [],
+      "images": [],
+      "hyperlinks": [],
+      "charts": [],
+      "raw_markdown": "# Slide 2\n\n**Layout:** Title and Content\n\n## 目录\n\n- 市场环境分析\n- 2023年业绩回顾\n- 2024年战略目标\n- 关键举措与行动计划\n- 资源需求与预算\n"
+    },
+    {
+      "slide_number": 3,
+      "title": "市场环境分析",
+      "layout_name": "Two Content",
+      "texts": [
+        {"level": 0, "text": "行业趋势"},
+        {"level": 1, "text": "AI技术快速渗透，智能化需求增长35%"},
+        {"level": 1, "text": "用户对个性化体验要求持续提升"},
+        {"level": 1, "text": "移动端使用占比达78%"},
+        {"level": 0, "text": "竞争格局"},
+        {"level": 1, "text": "主要竞争对手完成新一轮融资"},
+        {"level": 1, "text": "新进入者增加3家"},
+        {"level": 1, "text": "价格战风险上升"}
+      ],
+      "notes": ["重点关注AI对行业的冲击，这既是挑战也是机遇"],
+      "tables": [],
+      "images": [],
+      "hyperlinks": [{"text": "详细市场报告", "url": "https://example.com/market-report-2024"}],
+      "charts": [],
+      "raw_markdown": "# Slide 3\n\n**Layout:** Two Content\n\n## 市场环境分析\n\n行业趋势\n  - AI技术快速渗透，智能化需求增长35%\n  - 用户对个性化体验要求持续提升\n  - 移动端使用占比达78%\n竞争格局\n  - 主要竞争对手完成新一轮融资\n  - 新进入者增加3家\n  - 价格战风险上升\n\n### Hyperlinks\n- [详细市场报告](https://example.com/market-report-2024)\n"
+    },
+    {
+      "slide_number": 4,
+      "title": "2023年业绩回顾",
+      "layout_name": "Title and Content",
+      "texts": [
+        {"level": 0, "text": "核心指标完成情况"}
+      ],
+      "notes": ["业绩整体达标，但用户增长略低于预期"],
+      "tables": [
+        {
+          "rows": [
+            ["指标", "目标", "实际", "完成率"],
+            ["营收(万元)", "5000", "5200", "104%"],
+            ["用户数(万)", "100", "92", "92%"],
+            ["DAU(万)", "30", "35", "117%"],
+            ["NPS评分", "60", "65", "108%"]
+          ],
+          "row_count": 5,
+          "col_count": 4
+        }
+      ],
+      "images": [],
+      "hyperlinks": [],
+      "charts": [],
+      "raw_markdown": "# Slide 4\n\n**Layout:** Title and Content\n\n## 2023年业绩回顾\n\n核心指标完成情况\n\n### Table 1\n| 指标 | 目标 | 实际 | 完成率 |\n| --- | --- | --- | --- |\n| 营收(万元) | 5000 | 5200 | 104% |\n| 用户数(万) | 100 | 92 | 92% |\n| DAU(万) | 30 | 35 | 117% |\n| NPS评分 | 60 | 65 | 108% |\n"
+    },
+    {
+      "slide_number": 5,
+      "title": "2024年战略目标",
+      "layout_name": "Title and Content",
+      "texts": [
+        {"level": 0, "text": "营收目标：8000万元（+54%）"},
+        {"level": 0, "text": "用户目标：150万（+63%）"},
+        {"level": 0, "text": "产品矩阵扩展：新增2条产品线"},
+        {"level": 0, "text": "技术升级：完成AI能力全面集成"},
+        {"level": 0, "text": "国际化：进入东南亚市场"}
+      ],
+      "notes": ["目标激进但可实现，需要团队全力配合", "重点关注AI集成和国际化两个战略级项目"],
+      "tables": [],
+      "images": [],
+      "hyperlinks": [],
+      "charts": [
+        {"chart_type": "ColumnChart", "title": "营收增长预测"},
+        {"chart_type": "LineChart", "title": "用户增长曲线"}
+      ],
+      "raw_markdown": "# Slide 5\n\n**Layout:** Title and Content\n\n## 2024年战略目标\n\n- 营收目标：8000万元（+54%）\n- 用户目标：150万（+63%）\n- 产品矩阵扩展：新增2条产品线\n- 技术升级：完成AI能力全面集成\n- 国际化：进入东南亚市场\n\n### Charts\n- Type: ColumnChart\n  Title: 营收增长预测\n- Type: LineChart\n  Title: 用户增长曲线\n"
+    },
+    {
+      "slide_number": 6,
+      "title": "关键举措与行动计划",
+      "layout_name": "Title and Content",
+      "texts": [
+        {"level": 0, "text": "Q1：完成AI助手MVP开发"},
+        {"level": 1, "text": "组建10人AI专项团队"},
+        {"level": 1, "text": "完成核心算法选型"},
+        {"level": 0, "text": "Q2：产品矩阵扩展"},
+        {"level": 1, "text": "上线企业版产品"},
+        {"level": 1, "text": "启动教育行业解决方案"},
+        {"level": 0, "text": "Q3-Q4：国际化推进"},
+        {"level": 1, "text": "完成多语言支持"},
+        {"level": 1, "text": "建立东南亚本地化团队"}
+      ],
+      "notes": ["行动计划按季度分解，确保可执行性"],
+      "tables": [],
+      "images": [],
+      "hyperlinks": [],
+      "charts": [],
+      "raw_markdown": "# Slide 6\n\n**Layout:** Title and Content\n\n## 关键举措与行动计划\n\nQ1：完成AI助手MVP开发\n  - 组建10人AI专项团队\n  - 完成核心算法选型\nQ2：产品矩阵扩展\n  - 上线企业版产品\n  - 启动教育行业解决方案\nQ3-Q4：国际化推进\n  - 完成多语言支持\n  - 建立东南亚本地化团队\n"
+    },
+    {
+      "slide_number": 7,
+      "title": "资源需求与预算",
+      "layout_name": "Title and Content",
+      "texts": [
+        {"level": 0, "text": "人力资源需求"}
+      ],
+      "notes": ["预算较去年增加40%，主要投入在AI和国际化"],
+      "tables": [
+        {
+          "rows": [
+            ["部门", "新增人数", "预算(万元)"],
+            ["研发中心", "15", "800"],
+            ["产品部", "5", "200"],
+            ["市场部", "8", "500"],
+            ["运营部", "6", "300"]
+          ],
+          "row_count": 5,
+          "col_count": 3
+        }
+      ],
+      "images": [],
+      "hyperlinks": [],
+      "charts": [{"chart_type": "PieChart", "title": "预算分配比例"}],
+      "raw_markdown": "# Slide 7\n\n**Layout:** Title and Content\n\n## 资源需求与预算\n\n人力资源需求\n\n### Table 1\n| 部门 | 新增人数 | 预算(万元) |\n| --- | --- | --- |\n| 研发中心 | 15 | 800 |\n| 产品部 | 5 | 200 |\n| 市场部 | 8 | 500 |\n| 运营部 | 6 | 300 |\n\n### Charts\n- Type: PieChart\n  Title: 预算分配比例\n"
+    },
+    {
+      "slide_number": 8,
+      "title": "Q&A",
+      "layout_name": "Title Slide",
+      "texts": [
+        {"level": 0, "text": "感谢聆听"},
+        {"level": 0, "text": "产品部 · 2024年1月"}
+      ],
+      "notes": ["准备好回答关于AI投入产出比的问题"],
+      "tables": [],
+      "images": [],
+      "hyperlinks": [{"text": "完整方案文档", "url": "https://example.com/plan-2024-full"}],
+      "charts": [],
+      "raw_markdown": "# Slide 8\n\n**Layout:** Title Slide\n\n## Q&A\n\n感谢聆听\n产品部 · 2024年1月\n\n### Hyperlinks\n- [完整方案文档](https://example.com/plan-2024-full)\n"
+    }
+  ],
+  "warnings": []
+}
