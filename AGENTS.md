@@ -1,4 +1,4 @@
-﻿﻿﻿﻿# 此文件用于调度所有的 AGENT
+﻿﻿# 此文件用于调度所有的 AGENT
 
 AGENTS 相当于 AGENT 能力的目录和工作方案的生成原则
 AGENT 相当于 SKILL 的能力目录
@@ -276,17 +276,55 @@ def execute_enterprise_docs(project_name: str, materials: list, tables: list):
 
 **调度代码示例**：
 ```python
-def execute_competition(project_name: str, zip_file: str):
+import shutil, subprocess, json
+from pathlib import Path
+
+SUPPORTED_FORMATS = {".doc", ".docx", ".pdf", ".txt", ".md", ".pptx", ".xlsx"}
+
+def execute_competition(project_name: str, zip_file: str = None):
     """执行CompetitionWorkflow"""
-    from pathlib import Path
-    import shutil, subprocess
-    
     ws = Path(f"WORKSPACE/{project_name}")
+    ws.mkdir(parents=True, exist_ok=True)
     
-    # Step 1: 解压（外部处理示例）
-    # shutil.unpack_archive(zip_file, ws/"input/")
+    # Step 0: 初始化子目录
+    for agent in ["doc-content-analysis", "ppt-master"]:
+        (ws / agent / "input").mkdir(parents=True, exist_ok=True)
+        (ws / agent / "output").mkdir(parents=True, exist_ok=True)
     
-    # Step 2-4: 提取、PPT、知识库...
+    # Step 1: 解压或直接使用文档
+    if zip_file and Path(zip_file).exists():
+        input_dir = ws / "input"
+        input_dir.mkdir(exist_ok=True)
+        shutil.unpack_archive(zip_file, input_dir)
+        for f in input_dir.rglob("*"):
+            if f.is_file() and f.suffix.lower() in SUPPORTED_FORMATS:
+                shutil.copy2(f, ws / "doc-content-analysis" / "input" / f.name)
+    
+    # 检查输入是否为空
+    if not list((ws / "doc-content-analysis" / "input").iterdir()):
+        print("无可处理文档，工作流终止")
+        return
+    
+    # Step 2: 内容提取（加载 doc-content-analysis/AGENT.md）
+    # ... doc-convertor + AI 总结 → summary/ + manifest.json
+    
+    # Step 3: PPT生成
+    # 将 summary.md 复制到 ppt-master/input/
+    # 加载 ppt-master/AGENT.md 执行生成流程
+    
+    # Step 4: 知识库构建
+    summary_dir = ws / "doc-content-analysis" / "summary"
+    manifest = summary_dir / "manifest.json"
+    if manifest.exists():
+        with open(manifest, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if data.get("status") == "completed":
+            subprocess.run([
+                "python",
+                "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py",
+                "update", "knowledge-base/",
+                str(summary_dir), str(manifest)
+            ], check=True)
 ```
 
 ### 6. PPT 续写

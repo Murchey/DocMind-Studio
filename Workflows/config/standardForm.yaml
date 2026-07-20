@@ -236,8 +236,8 @@ abstract:
   chinese:
     keywords_marker: "**关键词:**"
     format:
-      - "**摘要:**" 后接摘要内容（粗体标记）
-      - "**关键词:**" 后接关键词列表（粗体标记）
+      - "**摘要:** 后接摘要内容（粗体标记）"
+      - "**关键词:** 后接关键词列表（粗体标记）"
       - 关键词之间用分号（；）分隔
     example: |
       **摘要:** 本研究以经典抗组胺药物氯苯那敏为核心研究对象...
@@ -247,8 +247,8 @@ abstract:
   english:
     keywords_marker: "**Key words:**"
     format:
-      - "**Abstract:**" 后接摘要内容（粗体标记）
-      - "**Key words:**" 后接关键词列表（粗体标记）
+      - "**Abstract:** 后接摘要内容（粗体标记）"
+      - "**Key words:** 后接关键词列表（粗体标记）"
       - 关键词之间用分号（;）分隔
     example: |
       **Abstract:** This study focuses on the classic antihistamine drug chlorphenamine...

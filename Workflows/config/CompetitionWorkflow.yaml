@@ -19,7 +19,7 @@ triggers:
   - keyword: "资源包"
   - keyword: "ZIP"
   - keyword: "7Z"
-  intent: "用户需要处理竞赛资源包，生成答辩PPT和知识库"
+  - intent: "用户需要处理竞赛资源包，生成答辩PPT和知识库"
 
 # ============================================================
 # 步骤定义
@@ -32,8 +32,13 @@ steps:
     output: |
       WORKSPACE/{ProjectName}/
       ├── doc-content-analysis/
+      │   ├── input/
+      │   └── summary/
       ├── ppt-master/
-      └── knowledge-builder/
+      │   ├── input/
+      │   ├── projects/
+      │   └── output/
+      └── input/                    # 资源包解压临时目录（可选）
 
   - id: "step-1"
     name: "竞赛资源解压与解析"
@@ -43,7 +48,12 @@ steps:
     description: |
       解压 ZIP/7Z 格式资源包
       提取项目书、代码、文档到 input/ 目录
-    note: "此步骤由调度器或外部脚本完成，工作流从解压后的文件开始"
+    note: |
+      此步骤由调度器或外部脚本完成。
+      支持两种模式：
+      1) ZIP/7Z 资源包：解压到 WORKSPACE/{ProjectName}/input/，再将文档复制到 doc-content-analysis/input/
+      2) 直接上传文档：直接将文件放入 doc-content-analysis/input/
+      仅复制 doc-content-analysis 支持的格式：.doc/.docx/.pdf/.txt/.md/.pptx/.xlsx
 
   - id: "step-2"
     name: "内容提取"
@@ -54,29 +64,42 @@ steps:
       - "manifest.json"
       - "summary.json"
     description: "提取项目书、代码注释、文档内容"
-    standalone_command: |
-      python ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py input.docx
+    note: |
+      调度器加载 ComponentAgents/doc-content-analysis/AGENT.md 执行完整流程：
+      1) doc-convertor Skill：格式转换 + 文本/图片提取
+      2) AI 总结：生成 summary.json + summary.md
+      3) 生成 manifest.json（含 content_hash）
+      若 input/ 无可处理文档，manifest.json 的 status 为 "empty"，终止工作流。
 
   - id: "step-3"
     name: "竞赛PPT构建"
     agent: "ppt-master"
-    input: "Step-2 的提取结果 + 项目书核心内容"
-    output: "WORKSPACE/{ProjectName}/ppt-master/output/"
+    input: "WORKSPACE/{ProjectName}/ppt-master/input/（由调度器从 doc-content-analysis/summary/ 复制 summary.md + 综合总结.md）"
+    output: "WORKSPACE/{ProjectName}/ppt-master/output/（由调度器从 projects/<name>/exports/ 收集）"
     description: "自动化生成答辩演示文稿"
     substeps:
       - name: "内容结构化"
         description: "从项目书中提取背景、方法、结果、创新点"
       - name: "PPT生成"
         description: "调用 ppt-master 生成结构化PPT"
-    standalone_command: |
-      python ComponentAgents/ppt-master-main/skills/ppt-master/SKILL.md
+    note: |
+      调度器负责：
+      1) 将 doc-content-analysis/summary/ 中的 summary.md（含 综合总结.md）复制到 ppt-master/input/
+      2) 读取 ComponentAgents/ppt-master/AGENT.md 执行生成流程
+      3) 将 projects/<name>/exports/ 中的 PPTX 复制到 ppt-master/output/
+      前置条件：Step-2 manifest.json 的 status 必须为 "completed"
 
   - id: "step-4"
     name: "知识库构建"
     agent: "KnowledgeBuilderWorkflow"
-    input: "所有竞赛材料"
+    input: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/manifest.json + 所有竞赛材料"
     output: "knowledge-base/"
     description: "保存竞赛资料到可成长式知识库"
+    note: |
+      调度器将 Step-2 的 manifest.json 传递给 kb_manager.py：
+      python kb_manager.py update knowledge-base/ {summary_dir}/ {summary_dir}/manifest.json
+      如 knowledge-base/ 不存在则自动执行 init 模式。
+      前置条件：Step-2 manifest.json 的 status 必须为 "completed"
 
 # ============================================================
 # 数据流
@@ -99,9 +122,32 @@ dataflow: |
 # ============================================================
 status_checks:
   - condition: "Step-2 manifest.json 中 status == 'completed'"
-    action: "继续 Step-3"
+    action: "继续 Step-3（PPT生成）和 Step-4（知识库构建）"
+  - condition: "Step-2 manifest.json 中 status == 'empty'"
+    action: "终止工作流，提示用户：无可处理的文档格式，请放入 .doc/.docx/.pdf/.txt/.md 文件"
+  - condition: "Step-2 manifest.json 中 status == 'failed'"
+    action: "终止工作流，读取 documents[].error 获取失败原因，提示用户修正后重试"
   - condition: "Step-3 PPT生成完成"
-    action: "继续 Step-4"
+    action: "收集 PPTX 到 ppt-master/output/，通知用户"
+  - condition: "Step-4 知识库构建完成"
+    action: "输出最终产物清单"
+
+# ============================================================
+# 错误处理
+# ============================================================
+error_handling:
+  - scenario: "manifest 状态不是 completed"
+    action: "fail"
+    message: "文档内容提取未成功完成，请检查输入文档格式或内容"
+  - scenario: "knowledge-base/ 不存在"
+    action: "fallback"
+    message: "自动切换为 init 模式，首次构建知识库"
+  - scenario: "ppt-master 目录不存在"
+    action: "skip"
+    message: "跳过 PPT 生成（可选步骤），继续知识库构建"
+  - scenario: "input/ 目录为空"
+    action: "fail"
+    message: "未找到可处理的文档，请放入支持的文档格式"
 
 # ============================================================
 # 独立Agent调用点汇总
@@ -109,16 +155,22 @@ status_checks:
 standalone_agents:
   - agent: "doc-content-analysis"
     purpose: "解析项目书/代码内容"
+    entry_point: "ComponentAgents/doc-content-analysis/AGENT.md"
     command: |
-      python ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py input.docx
+      python ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py <input_file>
   - agent: "ppt-master"
     purpose: "生成竞赛答辩PPT"
+    entry_point: "ComponentAgents/ppt-master/AGENT.md"
     command: |
-      python ComponentAgents/ppt-master-main/skills/ppt-master/SKILL.md
+      # 调度器读取 AGENT.md 按流程执行，非直接执行 SKILL.md
+      # 具体调用方式见 AGENT.md 中的执行流程
   - agent: "KnowledgeBuilderWorkflow"
     purpose: "构建竞赛知识库"
     command: |
-      python Workflows/config/KnowledgeBuilderWorkflow.yaml
+      python ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py update \
+        knowledge-base/ \
+        WORKSPACE/{ProjectName}/doc-content-analysis/summary/ \
+        WORKSPACE/{ProjectName}/doc-content-analysis/summary/manifest.json
 
 # ============================================================
 # 输出位置
@@ -135,18 +187,61 @@ outputs:
 # 调度代码示例
 # ============================================================
 scheduler_example: |
-  def execute_competition(project_name, zip_file):
+  import shutil
+  import json
+  from pathlib import Path
+  
+  # 定义支持的文档格式
+  SUPPORTED_FORMATS = {".doc", ".docx", ".pdf", ".txt", ".md", ".pptx", ".xlsx"}
+
+  def execute_competition(project_name, zip_file=None):
       ws = Path(f"WORKSPACE/{project_name}")
-      
-      # Step 1: 解压资源包（外部处理）
-      # shutil.unpack_archive(zip_file, ws/"input/")
-      
-      # Step 2: 内容提取
-      for f in (ws/"input").glob("*.docx"):
-          subprocess.run(["python", "ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py", str(f)])
-      
-      # Step 3: PPT生成
-      subprocess.run(["python", "ComponentAgents/ppt-master-main/skills/ppt-master/SKILL.md"])
-      
-      # Step 4: 知识库
-      subprocess.run(["python", "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py", "update", "knowledge-base/", ...])
+      ws.mkdir(parents=True, exist_ok=True)
+
+      # Step 0: 初始化 Agent 子目录
+      for agent in ["doc-content-analysis", "ppt-master"]:
+          (ws / agent / "input").mkdir(parents=True, exist_ok=True)
+          (ws / agent / "output").mkdir(parents=True, exist_ok=True)
+
+      # Step 1: 解压资源包或直接使用文档
+      if zip_file and Path(zip_file).exists():
+          input_dir = ws / "input"
+          input_dir.mkdir(exist_ok=True)
+          shutil.unpack_archive(zip_file, input_dir)
+          # 将支持的文档复制到 doc-content-analysis/input/
+          for f in input_dir.rglob("*"):
+              if f.is_file() and f.suffix.lower() in SUPPORTED_FORMATS:
+                  shutil.copy2(f, ws / "doc-content-analysis" / "input" / f.name)
+
+      # 检查是否有可处理文档
+      docs = list((ws / "doc-content-analysis" / "input").iterdir())
+      if not docs:
+          print("错误：未找到可处理的文档格式")
+          return
+
+      # Step 2: 内容提取（加载 AGENT.md 执行完整流程）
+      # 1) doc-convertor 转换 + 提取
+      # 2) AI 总结 → summary.json + summary.md
+      # 3) 生成 manifest.json
+      # --- 具体执行方式由调度器根据 AGENT.md 决定 ---
+
+      # Step 3: PPT 生成
+      # 调度器将 summary.md 复制到 ppt-master/input/
+      # 读取 ComponentAgents/ppt-master/AGENT.md 执行生成流程
+      # 将 projects/<name>/exports/ 的 PPTX 复制到 ppt-master/output/
+
+      # Step 4: 知识库构建
+      summary_dir = ws / "doc-content-analysis" / "summary"
+      manifest = summary_dir / "manifest.json"
+      if manifest.exists():
+          with open(manifest, "r", encoding="utf-8") as f:
+              data = json.load(f)
+          if data.get("status") == "completed":
+              subprocess.run([
+                  "python",
+                  "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py",
+                  "update",
+                  "knowledge-base/",
+                  str(summary_dir),
+                  str(manifest)
+              ], check=True)

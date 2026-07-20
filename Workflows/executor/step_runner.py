@@ -64,8 +64,16 @@ class StepRunner:
         ws = self.workspace_root / project_name
         ws.mkdir(parents=True, exist_ok=True)
         
-        # 创建基础子目录
-        for agent_dir in ["doc-content-analysis", "doc-form-master", "excel-master", "ppt-master", "phd-research-agent"]:
+        # 创建基础子目录（覆盖 AGENTS.md 中定义的全部 Agent）
+        for agent_dir in [
+            "doc-content-analysis",
+            "doc-form-master",
+            "excel-master",
+            "ppt-deep-summary",
+            "ppt-master",
+            "ppt-continuation-tool",
+            "phd-research-agent",
+        ]:
             (ws / agent_dir / "input").mkdir(parents=True, exist_ok=True)
             (ws / agent_dir / "output").mkdir(parents=True, exist_ok=True)
         
