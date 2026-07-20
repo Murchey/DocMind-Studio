@@ -285,6 +285,18 @@ class ASTToDocxConverter:
         if spacing_after:
             para.paragraph_format.space_after = Pt(spacing_after)
 
+        # 强制覆盖标题段落级别颜色为黑色，防止 Word 内置标题样式的主题色（蓝色）覆盖 run 级别设置
+        pPr = para._element.get_or_add_pPr()
+        p_rPr = OxmlElement('w:rPr')
+        p_color = OxmlElement('w:color')
+        p_color.set(qn('w:val'), '000000')
+        p_rPr.append(p_color)
+        # 移除现有的 rPr 以避免重复
+        existing_rpr = pPr.find(qn('w:rPr'))
+        if existing_rpr is not None:
+            pPr.remove(existing_rpr)
+        pPr.append(p_rPr)
+
     def _get_body_font_size(self):
         fonts_cfg = self.template_config.get("fonts", {})
         return fonts_cfg.get("chinese", {}).get("size", 12)

@@ -31,6 +31,33 @@ processor.run()
 processor.save('output.docx')
 ```
 
+### 用户确认模式（推荐）
+
+在格式化流程中，通过 AGENT 的 Step 9b-int 交互节点获取用户确认，结果写入 `table_config.json`：
+
+```python
+from table_processor import TableProcessor
+import json
+
+# Step 9b-int 已生成用户确认文件
+with open('workspace/validated/table_config.json', 'r', encoding='utf-8') as f:
+    table_config = json.load(f)
+
+processor = TableProcessor(
+    'workspace/output/formatted.docx',
+    'workspace/validated/template_config.json',
+    table_config=table_config  # 传入用户的三线表选择
+)
+
+# 根据 mode 执行
+# mode: "all"      → 全部表格应用三线表
+# mode: "data_only" → 仅数据表，不处理题注
+# mode: "skip"     → 跳过表格格式化
+if table_config.get('apply_three_line'):
+    processor.run()
+    processor.save('workspace/output/formatted.docx')
+```
+
 作为后处理步骤（在 format-normalizer 或 zero-format-normalizer 之后）：
 ```python
 from table_processor import TableProcessor
