@@ -190,59 +190,509 @@ class DocConverter:
             'error': 'All PDF conversion methods failed. Please install pdf2docx or PyMuPDF (pip install pymupdf).'
         }
 
-    # ── PDF直接文字提取（PyMuPDF） ─────────────────────────────
+    # ── PDF直接文字提取（PyMuPDF，增强版） ──────────────────────
+
+    # 中文学术论文常见标题关键词模式
+    _CN_HEADING_PATTERNS = [
+        '引言', '前言', '绪论', '摘要', 'Abstract',
+        '结论', '总结', '展望', '致谢', '参考文献', 'References',
+        '关键词', 'Keywords', '研究背景', '研究方法', '实验', '结果',
+        '讨论', '分析', '文献综述', '相关工作',
+    ]
 
     def extract_pdf_content(self, pdf_path: str) -> dict:
-        """使用PyMuPDF直接从PDF提取文字内容，适用于知网等中文PDF。"""
+        """
+        使用 PyMuPDF 从 PDF 提取文字内容（增强版）。
+        - 优先使用 get_text("dict") 获取字体级信息，识别标题层级
+        - 对扫描型/图片型 PDF 自动回退到 OCR
+        - 支持多栏排版、表/图检测
+        """
         if not os.path.exists(pdf_path):
             return {'success': False, 'error': f'File not found: {pdf_path}'}
         try:
-            import fitz  # PyMuPDF
+            import fitz
         except ImportError:
             return {'success': False, 'error': 'PyMuPDF not installed. Run: pip install pymupdf'}
 
         try:
             doc = fitz.open(pdf_path)
-            paragraphs = []
-            full_text_parts = []
+            total_pages = doc.page_count
 
-            for page_num in range(doc.page_count):
+            # ── Phase 1: 逐页提取 ──
+            all_blocks = []       # 所有文本块（含坐标、字体）
+            has_text = False      # 是否有可提取的文字
+            scan_pages = []       # 需要 OCR 的页面
+
+            for page_num in range(total_pages):
                 page = doc[page_num]
-                text = page.get_text()
-                if not text.strip():
-                    continue
+                blocks = self._extract_page_blocks(page, page_num)
+                if blocks:
+                    has_text = True
+                    all_blocks.extend(blocks)
+                else:
+                    scan_pages.append(page_num)
 
-                # 按行分割并过滤空行
-                lines = [line.strip() for line in text.splitlines() if line.strip()]
-                for line in lines:
-                    paragraphs.append({
-                        'text': line,
-                        'style': 'Normal',
-                        'is_heading': False,
-                        'level': 0
-                    })
-                    full_text_parts.append(line)
+            # ── Phase 2: OCR 回退 ──
+            if not has_text and scan_pages:
+                print(f"[INFO] No extractable text found — PDF appears to be scanned/image-based. "
+                      f"Attempting OCR on {len(scan_pages)} page(s)...")
+                ocr_blocks = self._ocr_extract(doc, scan_pages)
+                if ocr_blocks:
+                    all_blocks = ocr_blocks
+                    has_text = True
+                    print(f"[INFO] OCR extracted {len(all_blocks)} text block(s)")
+                else:
+                    print(f"[WARN] OCR failed or not available. Install Tesseract + pytesseract for OCR support.")
+
+            # ── Phase 2b: 混合模式（部分页有文字，部分需 OCR）──
+            elif scan_pages:
+                print(f"[INFO] {len(scan_pages)} page(s) have no extractable text. Attempting OCR on those pages...")
+                ocr_blocks = self._ocr_extract(doc, scan_pages)
+                if ocr_blocks:
+                    all_blocks.extend(ocr_blocks)
+                    # 按页码重排
+                    all_blocks.sort(key=lambda b: (b.get('page', 0), b.get('y0', 0), b.get('x0', 0)))
+
+            if not all_blocks:
+                doc.close()
+                return {'success': False, 'error': 'No text content extracted from PDF (text and OCR both failed)'}
+
+            # ── Phase 3: 字体统计 → 判定标题阈值 ──
+            font_stats = self._analyze_fonts(all_blocks)
+            body_size = font_stats['body_size']
+
+            # ── Phase 4: 标题识别 → 生成结构化段落 ──
+            paragraphs, tables = self._classify_blocks(all_blocks, body_size, font_stats)
+
+            # ── Phase 5: 后处理 ──
+            paragraphs = self._post_process_paragraphs(paragraphs)
+            full_text = '\n'.join(p['text'] for p in paragraphs)
 
             doc.close()
-
-            if not full_text_parts:
-                return {'success': False, 'error': 'No text content extracted from PDF'}
 
             return {
                 'success': True,
                 'file_name': Path(pdf_path).name,
                 'file_path': str(pdf_path),
-                'title': Path(pdf_path).stem,
-                'author': '',
-                'created_at': '',
+                'title': self._detect_title(paragraphs) or Path(pdf_path).stem,
+                'author': self._detect_author(paragraphs),
+                'created_at': self._detect_date(paragraphs),
+                'page_count': total_pages,
                 'paragraph_count': len(paragraphs),
-                'table_count': 0,
+                'table_count': len(tables),
                 'paragraphs': paragraphs,
-                'tables': [],
-                'full_text': '\n'.join(full_text_parts)
+                'tables': tables,
+                'full_text': full_text,
+                'extraction_method': 'pymupdf_dict' if has_text else 'ocr',
+                'font_stats': {
+                    'body_size_pt': round(body_size, 1),
+                    'title_size_pt': round(font_stats.get('title_size', 16), 1) if font_stats.get('title_size') else None,
+                    'h1_size_pt': round(font_stats.get('h1_size', 14), 1) if font_stats.get('h1_size') else None,
+                    'h2_size_pt': round(font_stats.get('h2_size', 12), 1) if font_stats.get('h2_size') else None,
+                    'h3_size_pt': round(font_stats.get('h3_size', 10.5), 1) if font_stats.get('h3_size') else None,
+                }
             }
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             return {'success': False, 'error': f'Failed to extract PDF content: {str(e)}'}
+
+    # ── 页面块提取（含字体信息）──────────────────────────────
+
+    def _extract_page_blocks(self, page, page_num: int) -> list:
+        """使用 get_text('dict') 提取每页的文字块，保留字体、坐标信息"""
+        import fitz
+        try:
+            text_dict = page.get_text("dict", flags=fitz.TEXT_PRESERVE_WHITESPACE)
+        except Exception:
+            return []
+
+        blocks = []
+        for block in text_dict.get("blocks", []):
+            if block.get("type") != 0:  # 非文本块（图片等）
+                continue
+
+            block_text_parts = []
+            block_fonts = []
+            block_bbox = None
+
+            for line in block.get("lines", []):
+                line_text_parts = []
+                for span in line.get("spans", []):
+                    text = span.get("text", "").strip()
+                    if not text:
+                        continue
+                    line_text_parts.append(text)
+                    block_fonts.append({
+                        'size': span.get('size', 0),
+                        'font': span.get('font', ''),
+                        'flags': span.get('flags', 0),
+                        'color': span.get('color', 0),
+                    })
+                    # 更新包围盒
+                    bbox = span.get('bbox')
+                    if bbox:
+                        if block_bbox is None:
+                            block_bbox = list(bbox)
+                        else:
+                            block_bbox[0] = min(block_bbox[0], bbox[0])
+                            block_bbox[1] = min(block_bbox[1], bbox[1])
+                            block_bbox[2] = max(block_bbox[2], bbox[2])
+                            block_bbox[3] = max(block_bbox[3], bbox[3])
+
+                if line_text_parts:
+                    block_text_parts.append(''.join(line_text_parts))
+
+            if not block_text_parts or not block_fonts:
+                continue
+
+            full_text = ' '.join(block_text_parts)
+            # 计算该块的主要字体大小（众数）
+            sizes = [f['size'] for f in block_fonts]
+            if sizes:
+                from collections import Counter
+                main_size = Counter(round(s, 1) for s in sizes).most_common(1)[0][0]
+            else:
+                main_size = 10.5
+
+            # 是否粗体（取大多数 span 的粗体标志）
+            bold_count = sum(1 for f in block_fonts if f.get('flags', 0) & 2**3)
+            is_bold = bold_count > len(block_fonts) / 2
+
+            blocks.append({
+                'page': page_num,
+                'text': full_text,
+                'size': main_size,
+                'is_bold': is_bold,
+                'font_name': block_fonts[0].get('font', '') if block_fonts else '',
+                'char_count': len(full_text),
+                'line_count': len(block_text_parts),
+                'bbox': block_bbox,
+                'x0': block_bbox[0] if block_bbox else 0,
+                'y0': block_bbox[1] if block_bbox else 0,
+                'x1': block_bbox[2] if block_bbox else 0,
+                'y1': block_bbox[3] if block_bbox else 0,
+            })
+
+        return blocks
+
+    # ── OCR 回退 ──────────────────────────────────────────────
+
+    def _ocr_extract(self, doc, page_nums: list) -> list:
+        """
+        对指定的页面列表执行 OCR 识别。
+        方法1: PyMuPDF 内置 Tesseract (fitz.get_tessocr / page.get_textpage_ocr)
+        方法2: 外部 pytesseract
+        """
+        blocks = []
+        try:
+            import fitz
+
+            # 检查 Tesseract 是否可用
+            tesseract_available = False
+            try:
+                import pytesseract
+                from PIL import Image
+                import io
+                tesseract_available = True
+            except ImportError:
+                pass
+
+            for page_num in page_nums:
+                page = doc[page_num]
+
+                # 方法1: PyMuPDF 内置 OCR（需要系统安装 Tesseract）
+                try:
+                    tp = page.get_textpage_ocr(
+                        flags=3,
+                        language='chi_sim+eng',
+                        dpi=300,
+                        full=True,
+                    )
+                    text = page.get_text(textpage=tp)
+                    if text and text.strip():
+                        # 按行分割，当作普通文本块处理
+                        for line in text.splitlines():
+                            line = line.strip()
+                            if not line:
+                                continue
+                            blocks.append({
+                                'page': page_num,
+                                'text': line,
+                                'size': 10.5,
+                                'is_bold': False,
+                                'font_name': 'SimSun',
+                                'char_count': len(line),
+                                'line_count': 1,
+                                'bbox': None,
+                                'x0': 72, 'y0': 72, 'x1': 500, 'y1': 84,
+                            })
+                        print(f"[INFO] page {page_num + 1}: PyMuPDF OCR extracted {len(text)} chars")
+                        continue
+                except Exception:
+                    pass
+
+                # 方法2: pytesseract（需要 pip install pytesseract + 系统安装 Tesseract）
+                if tesseract_available and not blocks:
+                    try:
+                        mat = fitz.Matrix(2, 2)  # 2x 缩放提高 OCR 精度
+                        pix = page.get_pixmap(matrix=mat)
+                        img = Image.open(io.BytesIO(pix.tobytes("png")))
+                        text = pytesseract.image_to_string(img, lang='chi_sim+eng')
+                        if text.strip():
+                            for line in text.splitlines():
+                                line = line.strip()
+                                if not line:
+                                    continue
+                                blocks.append({
+                                    'page': page_num,
+                                    'text': line,
+                                    'size': 10.5,
+                                    'is_bold': False,
+                                    'font_name': 'SimSun',
+                                    'char_count': len(line),
+                                    'line_count': 1,
+                                    'bbox': None,
+                                    'x0': 72, 'y0': 72, 'x1': 500, 'y1': 84,
+                                })
+                            print(f"[INFO] page {page_num + 1}: pytesseract OCR extracted {len(text)} chars")
+                    except Exception:
+                        pass
+
+        except Exception as e:
+            print(f"[WARN] OCR extraction failed: {e}")
+
+        return blocks
+
+    # ── 字体分析 ──────────────────────────────────────────────
+
+    def _analyze_fonts(self, blocks: list) -> dict:
+        """分析所有文本块的字体大小分布，判定正文基准字号和各级标题阈值"""
+        if not blocks:
+            return {'body_size': 10.5}
+
+        sizes = [b['size'] for b in blocks if b['size'] > 0]
+        if not sizes:
+            return {'body_size': 10.5}
+
+        from collections import Counter
+        size_counter = Counter(round(s, 1) for s in sizes)
+
+        # 正文通常是出现频率最高的字号（排除极小和极大值）
+        common_sizes = [(s, c) for s, c in size_counter.most_common()
+                        if 8 <= s <= 14]
+        if not common_sizes:
+            body_size = sorted(sizes)[len(sizes) // 2]
+        else:
+            body_size = common_sizes[0][0]
+
+        # 各级标题字号（比 body_size 大）
+        larger_sizes = sorted(set(round(s, 1) for s in sizes if s > body_size + 1), reverse=True)
+
+        result = {'body_size': body_size}
+
+        if larger_sizes:
+            # 最大字号 → title
+            result['title_size'] = larger_sizes[0]
+            # 其余按大小分 H1/H2/H3
+            if len(larger_sizes) >= 4:
+                result['h1_size'] = larger_sizes[1]
+                result['h2_size'] = larger_sizes[2]
+                result['h3_size'] = larger_sizes[3]
+            elif len(larger_sizes) == 3:
+                result['h1_size'] = larger_sizes[1]
+                result['h2_size'] = larger_sizes[2]
+                result['h3_size'] = body_size + 0.5
+            elif len(larger_sizes) == 2:
+                result['h1_size'] = larger_sizes[1]
+                result['h2_size'] = body_size + 0.5
+                result['h3_size'] = body_size
+            else:
+                result['h1_size'] = body_size + 1
+                result['h2_size'] = body_size + 0.5
+                result['h3_size'] = body_size
+        else:
+            # 无大字号的退化情况：按粗体判断
+            result['title_size'] = body_size
+            result['h1_size'] = body_size
+            result['h2_size'] = body_size
+            result['h3_size'] = body_size
+
+        return result
+
+    # ── 块分类（标题 vs 正文）─────────────────────────────────
+
+    def _classify_blocks(self, blocks: list, body_size: float, font_stats: dict) -> tuple:
+        """
+        将文本块分类为不同级别的标题和正文段落。
+        返回 (paragraphs, tables)
+        """
+        title_size = font_stats.get('title_size', body_size + 3)
+        h1_size = font_stats.get('h1_size', body_size + 2)
+        h2_size = font_stats.get('h2_size', body_size + 1)
+        h3_size = font_stats.get('h3_size', body_size + 0.5)
+
+        paragraphs = []
+        tables = []
+        page_blocks_grouped = {}
+        for b in blocks:
+            page_blocks_grouped.setdefault(b['page'], []).append(b)
+
+        for page_num in sorted(page_blocks_grouped):
+            page_blocks = page_blocks_grouped[page_num]
+            for blk in page_blocks:
+                text = blk['text'].strip()
+                if not text:
+                    continue
+
+                size = blk['size']
+                is_bold = blk.get('is_bold', False)
+                char_count = blk['char_count']
+                font_name = blk.get('font_name', '').lower()
+
+                # ── 字数太少 → 可能是页码/页眉，跳过 ──
+                if char_count <= 2 and not any(kw in text for kw in ['摘要', '引言', '结论']):
+                    continue
+
+                # ── 字号判定 ──
+                if size >= title_size + 1:
+                    level = 0  # Title
+                elif size >= h1_size - 0.2:
+                    level = 1  # H1
+                elif size >= h2_size - 0.2:
+                    level = 2  # H2
+                elif size >= h3_size - 0.2:
+                    level = 3  # H3
+                else:
+                    level = 0  # 正文
+
+                # ── 粗体加分 ──
+                if is_bold and level == 0 and size >= body_size:
+                    # 短行 + 粗体 + 字号不少于正文 → 可能是标题
+                    if char_count <= 60:
+                        level = 3
+                    elif size >= h2_size - 0.5:
+                        level = 2
+
+                # ── 关键词/模式匹配修正 ──
+                level = self._pattern_heading_fix(text, level, char_count)
+
+                # ── 黑体/标题字体加分 ──
+                if level == 0 and size >= body_size:
+                    if any(f in font_name for f in ['heiti', 'simhei', '黑体', 'bold']):
+                        if char_count <= 80:
+                            level = 3
+
+                is_heading = level >= 1
+
+                paragraphs.append({
+                    'text': text,
+                    'style': f'Heading {level}' if is_heading else 'Normal',
+                    'is_heading': is_heading,
+                    'level': level,
+                    'page': page_num + 1,
+                    'font_size': round(size, 1),
+                    'is_bold': is_bold,
+                    'char_count': char_count,
+                })
+
+        return paragraphs, tables
+
+    def _pattern_heading_fix(self, text: str, current_level: int, char_count: int) -> int:
+        """基于内容模式修正标题级别"""
+        # 中文数字编号: 一、二、三... / 1. / 1.1 / 第X章
+        import re
+
+        # 第X章/节/部分
+        if re.match(r'^第[一二三四五六七八九十\d]+[章节部分篇]', text):
+            return max(current_level, 1)
+
+        # 数字编号: 1 xxx, 1. xxx, 1.1 xxx, 1.1.1 xxx
+        if re.match(r'^\d+(\.\d+)*\s+\S', text):
+            dots = text.split('.')
+            if len(dots) >= 3:
+                return max(current_level, 3)
+            elif len(dots) == 2:
+                return max(current_level, 2)
+            else:
+                return max(current_level, 1)
+
+        # 中文数字编号: 一、xxx / （一）xxx
+        if re.match(r'^[（(]?[一二三四五六七八九十]+[）).、]', text) and char_count <= 80:
+            return max(current_level, 1)
+
+        # 关键词模式
+        for kw in self._CN_HEADING_PATTERNS:
+            if text.startswith(kw) and char_count <= 60:
+                return max(current_level, 1)
+            # "关键词：xxx" 或 "关键词: xxx"
+            if text.startswith(kw) and ('：' in text or ':' in text) and char_count <= 100:
+                return max(current_level, 2)
+
+        # "摘要"/"Abstract" 单独一行
+        if text.strip() in ('摘要', 'Abstract') and char_count <= 10:
+            return max(current_level, 1)
+
+        return current_level
+
+    # ── 后处理 ────────────────────────────────────────────────
+
+    def _post_process_paragraphs(self, paragraphs: list) -> list:
+        """
+        合并相邻的正文段落、过滤页码/页眉等噪声。
+        """
+        if not paragraphs:
+            return paragraphs
+
+        cleaned = []
+        for p in paragraphs:
+            text = p['text']
+
+            # 过滤纯数字（页码）
+            if text.isdigit() and len(text) <= 3:
+                continue
+
+            # 过滤页眉常见模式
+            if any(text.startswith(pf) for pf in ['收稿日期', '作者简介', '基金项目', '中图分类号', 'DOI']):
+                if p['char_count'] <= 80:
+                    continue
+
+            cleaned.append(p)
+
+        return cleaned
+
+    # ── 元信息检测 ────────────────────────────────────────────
+
+    def _detect_title(self, paragraphs: list) -> str:
+        """从段落中检测论文标题（通常是第一个大字号段落）"""
+        for p in paragraphs:
+            if p['level'] == 0 and p.get('font_size', 10) >= 14:
+                return p['text']
+        # 回退：第一个非短段落
+        for p in paragraphs:
+            if p['char_count'] >= 5 and p['level'] == 0:
+                return p['text']
+        return ''
+
+    def _detect_author(self, paragraphs: list) -> str:
+        """检测作者信息"""
+        import re
+        for i, p in enumerate(paragraphs):
+            text = p['text']
+            # 通常在标题后面几行，带数字上标（机构编号）
+            if re.search(r'[\u4e00-\u9fff]{2,4}\s*[\d,，、]+', text) and p['char_count'] <= 60:
+                return text
+        return ''
+
+    def _detect_date(self, paragraphs: list) -> str:
+        """检测日期"""
+        import re
+        for p in paragraphs:
+            text = p['text']
+            m = re.search(r'(\d{4})[年.-](\d{1,2})[月.-](\d{1,2})', text)
+            if m:
+                return f"{m.group(1)}-{m.group(2).zfill(2)}-{m.group(3).zfill(2)}"
+        return ''
 
     # ── 统一转换入口 ──────────────────────────────────────────
 

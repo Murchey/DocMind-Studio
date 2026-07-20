@@ -1,4 +1,4 @@
-﻿# 此文件用于调度所有的 AGENT
+﻿﻿﻿﻿# 此文件用于调度所有的 AGENT
 
 AGENTS 相当于 AGENT 能力的目录和工作方案的生成原则
 AGENT 相当于 SKILL 的能力目录
@@ -113,20 +113,20 @@ project_ws.mkdir(parents=True, exist_ok=True)
 import sys
 sys.path.insert(0, str(root / 'ComponentAgents' / 'process-skill' / 'scripts'))
 from progress_tracker import ProgressTracker
-tracker = ProgressTracker()  # 默认写入 WORKSPACE/.docmind-progress.json
+tracker = ProgressTracker(root=str(root / "WORKSPACE"))
 task_id = tracker.create_task(
     project=project_name,
-    workflow="KnowledgeBuilderWorkflow",  # 或其他工作流名称
+    workflow="KnowledgeBuilderWorkflow",
     agent="doc-content-analysis",
     steps=[
-        {"id": "workspace-init", "name": "创建项目工作区", "agent": "AGENTS.md"},
-        {"id": "content-extraction", "name": "文档内容提取", "agent": "doc-content-analysis"},
-        {"id": "knowledge-build", "name": "知识库构建", "agent": "knowledge-builder"},
+        {"id": "workspace-init", "name": "创建项目工作区"},
+        {"id": "content-extraction", "name": "文档内容提取"},
+        {"id": "knowledge-build", "name": "知识库构建"},
     ]
 )
 
-# 4. 更新进度 - 工作区创建完成
-tracker.update_progress(task_id=task_id, step_id="workspace-init", progress=100, message="工作区创建完成")
+# 4. 更新进度 — 工作区创建完成
+tracker.complete_step(task_id=task_id, step_id="workspace-init", message="工作区创建完成")
 
 # 5. 为每个 AGENT 创建子工作区
 agent_ws = project_ws / "doc-form-master"
@@ -554,10 +554,10 @@ def dispatch_workflow(user_requirement: str, project_name: str):
 
 ```python
 # 步骤开始
-tracker.update_progress(task_id=task_id, step_id="content-extraction", progress=0, message="开始文档内容提取")
+tracker.step_start(task_id=task_id, step_id="content-extraction", message="开始文档内容提取")
 
 # 步骤进行中
-tracker.update_progress(task_id=task_id, step_id="content-extraction", progress=50, message="正在处理文档1...")
+tracker.step_progress(task_id=task_id, step_id="content-extraction", percent=50, message="正在处理文档1...")
 
 # 步骤完成
 tracker.complete_step(task_id=task_id, step_id="content-extraction", message="文档内容提取完成")

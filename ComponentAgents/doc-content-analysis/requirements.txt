@@ -4,13 +4,13 @@ PyMuPDF>=1.23.0
 Pillow>=9.0
 pywin32>=306; sys_platform == "win32"
 
-# OCR dependencies (optional, install one of the following)
-# PaddleOCR (recommended for Chinese)
+# OCR 依赖（处理扫描型/图片型知网 PDF 必须）
+# 方案1: Tesseract（推荐，需系统安装 Tesseract + 中文语言包）
+pytesseract>=0.3.10
+
+# 方案2: PaddleOCR（中文识别精度更高，但体积较大）
 # paddleocr>=2.6
 # paddlepaddle>=2.4
 
-# EasyOCR (multi-language)
+# 方案3: EasyOCR（多语言，无需系统依赖）
 # easyocr>=1.6
-
-# Tesseract (requires system installation)
-# pytesseract>=0.3.10

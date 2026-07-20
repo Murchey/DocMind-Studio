@@ -148,6 +148,28 @@ python SKILLS/doc-convertor/scripts/doc_converter.py extract_images <docx_path> 
 | 方法 | 依赖 | 说明 |
 |------|------|------|
 | pdf2docx | `pdf2docx` | Python 库，保留格式和布局 |
+| PyMuPDF 直接提取 | `PyMuPDF` | **增强版**：基于 `get_text("dict")` 获取字体级信息，自动识别标题层级 |
+| OCR 回退 | `PyMuPDF` + Tesseract | 扫描型/图片型 PDF（知网不可复制文字的 PDF）自动回退到 OCR |
+
+### PDF 提取增强（v2）
+
+针对知网等学术论文 PDF，`extract_pdf_content()` 现已支持：
+
+| 能力 | 说明 |
+|------|------|
+| **字体级标题识别** | 通过 `get_text("dict")` 获取每个 span 的字号、粗体、字体名，自动判定 Title/H1/H2/H3 |
+| **内容模式修正** | 识别「第X章」「一、」「1.1」「摘要」「引言」「参考文献」等中文论文结构 |
+| **扫描型 PDF OCR** | `page.get_text()` 返回空时，自动回退到 PyMuPDF 内置 Tesseract OCR（需系统安装 Tesseract） |
+| **噪声过滤** | 自动过滤页码、页眉（收稿日期、作者简介、DOI 等） |
+| **元信息检测** | 自动识别论文标题、作者、日期 |
+
+**OCR 环境配置**（处理扫描型知网 PDF 必须）：
+
+1. 安装 Tesseract：https://github.com/UB-Mannheim/tesseract/wiki（Windows）
+2. 安装中文语言包：安装时勾选 Chinese Simplified
+3. 安装 Python 依赖：`pip install pytesseract Pillow`
+
+> **注意**：OCR 精度取决于 Tesseract 语言包和 PDF 扫描质量。建议 DPI ≥ 300 的 PDF。对于低质量扫描件，可考虑 PaddleOCR 作为替代方案。
 
 ---
 

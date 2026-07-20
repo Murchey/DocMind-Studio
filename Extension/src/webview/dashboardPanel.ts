@@ -1484,21 +1484,37 @@ export class DashboardPanel {
     try {
       const raw = JSON.parse(this.readText(statePath)) as Record<string, unknown>;
       
-      const completedSteps = (raw.completed_steps as string[]) || [];
-      const failedSteps = (raw.failed_steps as string[]) || [];
+      // 优先使用新版 steps 数组（含 percent/message）
+      const rawSteps = raw.steps as ProgressStep[] | undefined;
+      const completedSteps: string[] = (raw.completed_steps as string[]) || [];
+      const failedSteps: string[] = (raw.failed_steps as string[]) || [];
       const currentStep = this.asString(raw.current_step);
       
-      // 构建步骤列表
-      const steps: ProgressStep[] = [];
-      completedSteps.forEach((stepId: string) => {
-        steps.push({ id: stepId, name: stepId, status: 'completed' });
-      });
-      if (currentStep) {
-        steps.push({ id: currentStep, name: currentStep, status: 'running' });
+      let steps: ProgressStep[];
+      
+      if (rawSteps && rawSteps.length > 0) {
+        // 新版格式：直接使用 steps 数组
+        steps = rawSteps.map((s: any) => ({
+          id: this.asString(s.id),
+          name: this.asString(s.name) || this.asString(s.id) || '',
+          agent: this.asString(s.agent),
+          status: this.asString(s.status) || 'pending',
+          percent: this.asNumber(s.percent) ?? this.asNumber(s.progress),
+          message: this.asString(s.message) || this.asString(s.detail),
+        }));
+      } else {
+        // 旧版格式：从 completed_steps / failed_steps / current_step 重建
+        steps = [];
+        completedSteps.forEach((stepId: string) => {
+          steps.push({ id: stepId, name: stepId, status: 'completed', percent: 100 });
+        });
+        if (currentStep) {
+          steps.push({ id: currentStep, name: currentStep, status: 'running', percent: 50 });
+        }
+        failedSteps.forEach((stepId: string) => {
+          steps.push({ id: stepId, name: stepId, status: 'failed', percent: 100 });
+        });
       }
-      failedSteps.forEach((stepId: string) => {
-        steps.push({ id: stepId, name: stepId, status: 'failed' });
-      });
 
       // 计算进度百分比
       const totalSteps = completedSteps.length + failedSteps.length + (currentStep ? 1 : 0);
