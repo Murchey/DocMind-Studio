@@ -2,13 +2,17 @@
   "name": "docmind-studio",
   "displayName": "DocMind Studio",
   "description": "多 Agent 文档智能处理与知识库管理面板",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "docmind",
   "engines": {
     "vscode": "^1.85.0"
   },
-  "categories": ["Other"],
-  "activationEvents": [],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onLanguage:docmind-dms"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -20,6 +24,21 @@
         }
       ]
     },
+    "languages": [
+      {
+        "id": "docmind-dms",
+        "aliases": [
+          "DocMind Project",
+          "dms"
+        ],
+        "extensions": [
+          ".dms"
+        ],
+        "mimetypes": [
+          "application/x-docmind-project"
+        ]
+      }
+    ],
     "views": {
       "docmind": [
         {
@@ -76,6 +95,41 @@
         "command": "docmind.revealPath",
         "title": "Reveal in Explorer",
         "icon": "$(folder-opened)"
+      },
+      {
+        "command": "docmind.exportProject",
+        "title": "DocMind: Export Project",
+        "icon": "$(package)"
+      },
+      {
+        "command": "docmind.importProject",
+        "title": "DocMind: Import Project",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "docmind.openDmsFile",
+        "title": "DocMind: Open Project File",
+        "icon": "$(file-binary)"
+      },
+      {
+        "command": "docmind.deleteProject",
+        "title": "DocMind: Delete Project",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "docmind.importAgent",
+        "title": "DocMind: 导入智能体",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "docmind.importWorkflow",
+        "title": "DocMind: 导入工作流",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "docmind.buildKnowledgeBase",
+        "title": "DocMind: 构建知识库",
+        "icon": "$(database)"
       }
     ],
     "configuration": {
@@ -126,6 +180,16 @@
           "command": "docmind.revealPath",
           "when": "viewItem =~ /docmindRevealable/",
           "group": "navigation"
+        },
+        {
+          "command": "docmind.exportProject",
+          "when": "viewItem =~ /docmindExportable/",
+          "group": "inline"
+        },
+        {
+          "command": "docmind.deleteProject",
+          "when": "viewItem =~ /docmindExportable/",
+          "group": "inline"
         }
       ]
     }
@@ -139,12 +203,17 @@
     "lint": "eslint src --ext ts"
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
+    "@types/adm-zip": "^0.5.8",
     "@types/node": "^20.0.0",
-    "typescript": "^5.3.0",
-    "esbuild": "^0.19.0",
+    "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^6.0.0",
     "@typescript-eslint/parser": "^6.0.0",
-    "eslint": "^8.50.0"
+    "@vscode/vsce": "^3.9.2",
+    "esbuild": "^0.19.0",
+    "eslint": "^8.50.0",
+    "typescript": "^5.3.0"
+  },
+  "dependencies": {
+    "adm-zip": "^0.6.0"
   }
 }

@@ -376,6 +376,18 @@ result = manager.apply_margins('workspace/output/formatted.docx', standard='acad
 
 ## Step 13: 生成报告
 
+## Step 13b: 知识库注册（可选）
+- **目的**：将格式化结果注册到项目知识库，供其他 Agent 查询引用
+- **执行命令**：
+  ```bash
+  python SKILLS/knowledge-builder/scripts/kb_manager.py register \
+    workspace/../knowledge-base/ \
+    doc-form-master \
+    workspace/output/manifest.json \
+    --summary-dir workspace/output/
+  ```
+- **说明**：注册后知识库可被下游 Agent 检索和引用
+
 ## Step 14: 自定义格式配置管理（独立调用）
 
 当用户要求修改自定义格式时，启动 `custom-format-manager` WEB 界面，允许用户管理格式配置。

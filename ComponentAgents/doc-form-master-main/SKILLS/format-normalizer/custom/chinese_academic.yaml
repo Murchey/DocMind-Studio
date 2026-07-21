@@ -92,9 +92,19 @@ heading:
 
   level3:
 
-    font: 宋体
+    font: 黑体
 
-    size: 12  # 小4号宋体，左对齐
+    size: 12  # 小4号黑体，左对齐
+
+    bold: true
+
+    alignment: left
+
+  level4:
+
+    font: 黑体
+
+    size: 12  # 小4号黑体，左对齐
 
     bold: true
 

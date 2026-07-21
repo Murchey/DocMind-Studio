@@ -16,7 +16,8 @@ DEFAULT_TEMPLATE = {
     "heading": {
         "level1": {"font": "黑体", "size": 16, "bold": True, "alignment": "center", "color": "#000000", "spacing_before": 24, "spacing_after": 18},
         "level2": {"font": "黑体", "size": 14, "bold": True, "alignment": "left", "color": "#000000", "spacing_before": 18, "spacing_after": 12},
-        "level3": {"font": "黑体", "size": 13, "bold": True, "alignment": "left", "color": "#000000", "spacing_before": 12, "spacing_after": 6}
+        "level3": {"font": "黑体", "size": 13, "bold": True, "alignment": "left", "color": "#000000", "spacing_before": 12, "spacing_after": 6},
+        "level4": {"font": "黑体", "size": 12, "bold": True, "alignment": "left", "color": "#000000", "spacing_before": 6, "spacing_after": 6}
     },
     "paragraph": {"alignment": "justify", "line_spacing": 1.5, "first_indent": 2, "paragraph_spacing": False},
     "page": {"margin_top": 2.54, "margin_bottom": 2.54, "margin_left": 3.18, "margin_right": 3.18},
@@ -1274,7 +1275,7 @@ class PreviewHandler(BaseHTTPRequestHandler):
         pass
 
 
-def find_free_port(start=8765, end=8770):
+def find_free_port(start=8765, end=8800):
     for port in range(start, end + 1):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             try:
@@ -1285,7 +1286,7 @@ def find_free_port(start=8765, end=8770):
     return start
 
 
-def run_preview(ast_path, template_config_path, source_docx_path=None):
+def run_preview(ast_path, template_config_path, source_docx_path=None, open_browser=True):
     global STATE
     STATE = PreviewState(ast_path, template_config_path, source_docx_path)
 
@@ -1301,8 +1302,11 @@ def run_preview(ast_path, template_config_path, source_docx_path=None):
 
     time.sleep(2)
 
-    print(f"[INFO] Opening browser: {url}")
-    webbrowser.open(url)
+    if open_browser:
+        print(f"[INFO] Opening browser: {url}")
+        webbrowser.open(url)
+    else:
+        print(f"[INFO] Preview available at: {url} (auto-open disabled)")
 
     server_thread.join()
 

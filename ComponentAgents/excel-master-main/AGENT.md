@@ -185,6 +185,18 @@ Agent divides user requirements into two types: **Customized Requirements** and 
       * Save chart to workspace `excel_output` directory
       * Show chart to user and ask for feedback
 
+11. **知识库注册（可选）**
+
+    * 将分析结果注册到项目知识库，供其他 Agent 查询引用
+    * **执行命令**：
+      ```bash
+      python SKILLS/knowledge-builder/scripts/kb_manager.py register \
+        {workspace}/../knowledge-base/ \
+        excel-master \
+        {workspace}/summary/manifest.json \
+        --summary-dir {workspace}/summary/
+      ```
+
 ---
 
 ### 2. General Requirements (Batch Processing of Large Numbers of Tables, Simple Comparison)
@@ -281,6 +293,18 @@ Agent divides user requirements into two types: **Customized Requirements** and 
       * Save chart to workspace `excel_output` directory
       * Show chart to user and ask for feedback
 
+11. **知识库注册（可选）**
+
+    * 将分析结果注册到项目知识库，供其他 Agent 查询引用
+    * **执行命令**：
+      ```bash
+      python SKILLS/knowledge-builder/scripts/kb_manager.py register \
+        {workspace}/../knowledge-base/ \
+        excel-master \
+        {workspace}/summary/manifest.json \
+        --summary-dir {workspace}/summary/
+      ```
+
 ---
 
 ### 3. Enhanced Analysis Requirements (Business-Specific Data Analysis with Reference Documents)
@@ -363,6 +387,18 @@ Agent divides user requirements into two types: **Customized Requirements** and 
      * Generate chart based on user selection
      * Save chart to workspace `excel_output` directory
      * Show chart to user and ask for feedback
+
+10. **知识库注册（可选）**
+
+    * 将分析结果注册到项目知识库，供其他 Agent 查询引用
+    * **执行命令**：
+      ```bash
+      python SKILLS/knowledge-builder/scripts/kb_manager.py register \
+        {workspace}/../knowledge-base/ \
+        excel-master \
+        {workspace}/summary/manifest.json \
+        --summary-dir {workspace}/summary/
+      ```
 
 ---
 

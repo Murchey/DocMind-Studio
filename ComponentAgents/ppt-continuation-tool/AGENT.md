@@ -162,6 +162,18 @@ WORKSPACE/{ProjectName}/ppt-continuation-tool/
 - **目的**：生成处理清单供调度器消费
 - **输出位置**：`{workspace}/output/manifest.json`
 
+### Step 8: 知识库注册（可选）
+- **目的**：将续写结果注册到项目知识库，供其他 Agent 查询引用
+- **执行命令**：
+  ```bash
+  python SKILLS/knowledge-builder/scripts/kb_manager.py register \
+    {workspace}/../knowledge-base/ \
+    ppt-continuation-tool \
+    {workspace}/output/manifest.json \
+    --summary-dir {workspace}/output/
+  ```
+- **说明**：注册后知识库可被下游 Agent 检索和引用
+
 ---
 
 ## 核心规则

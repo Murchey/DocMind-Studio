@@ -172,6 +172,18 @@ python ComponentAgents/ppt-deep-summary/SKILLS/PPTFormatting/scripts/ppt_formatt
 - 智能分析结果（语义、逻辑、总结）
 - 生成时间戳
 
+## Step 8: 知识库注册（可选）
+- **目的**：将 PPT 分析结果注册到项目知识库，供其他 Agent 查询引用
+- **执行命令**：
+  ```bash
+  python SKILLS/knowledge-builder/scripts/kb_manager.py register \
+    {workspace_path}/../knowledge-base/ \
+    ppt-deep-summary \
+    {workspace_path}/output/manifest.json \
+    --summary-dir {workspace_path}/output/
+  ```
+- **说明**：注册后知识库可被下游 Agent 检索和引用
+
 ---
 
 # 输出规则

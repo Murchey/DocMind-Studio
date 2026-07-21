@@ -26,7 +26,18 @@ interface ProjectSummary {
   sizeFormatted: string;
   updatedAt: string;
   knowledgeBase?: KnowledgeBaseSummary;
+  missingKB?: boolean;
   agents: AgentWorkspaceSummary[];
+  workflow?: WorkflowStateSummary;
+}
+
+interface WorkflowStateSummary {
+  status: string;
+  percent: number;
+  currentStep: string;
+  workflow: string;
+  agent: string;
+  steps: Array<{ id: string; name: string; status: string; percent: number; message?: string }>;
 }
 
 interface AgentWorkspaceSummary {
@@ -236,6 +247,36 @@ export class DashboardPanel {
   private handleMessage(message: { type: string; path?: string; name?: string; view?: string; lang?: string }) {
     if (message.type === 'openPath' && message.path) {
       vscode.commands.executeCommand('docmind.openPath', message.path);
+      return;
+    }
+
+    if (message.type === 'exportProject' && message.path) {
+      vscode.commands.executeCommand('docmind.exportProject', { filePath: message.path, label: message.name });
+      return;
+    }
+
+    if (message.type === 'deleteProject' && message.path) {
+      vscode.commands.executeCommand('docmind.deleteProject', { filePath: message.path, label: message.name });
+      return;
+    }
+
+    if (message.type === 'buildKB' && message.path) {
+      vscode.commands.executeCommand('docmind.buildKnowledgeBase', { filePath: message.path, label: message.name });
+      return;
+    }
+
+    if (message.type === 'importProject') {
+      vscode.commands.executeCommand('docmind.importProject');
+      return;
+    }
+
+    if (message.type === 'importAgent') {
+      vscode.commands.executeCommand('docmind.importAgent');
+      return;
+    }
+
+    if (message.type === 'importWorkflow') {
+      vscode.commands.executeCommand('docmind.importWorkflow');
       return;
     }
 
@@ -855,6 +896,57 @@ export class DashboardPanel {
       color: var(--vscode-badge-foreground);
     }
 
+    .grid-item-progress {
+      margin-top: 8px;
+    }
+
+    .progress-bar-outer {
+      height: 4px;
+      background: var(--vscode-progressBar-background);
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 4px;
+    }
+
+    .progress-bar-inner {
+      height: 100%;
+      border-radius: 2px;
+      transition: width 0.3s ease;
+    }
+
+    .progress-bar-inner.running {
+      background: var(--vscode-progressBar-background);
+      animation: progress-pulse 1.5s ease-in-out infinite;
+    }
+
+    .progress-bar-inner.completed {
+      background: var(--vscode-charts-green);
+    }
+
+    .progress-bar-inner.failed {
+      background: var(--vscode-errorForeground);
+    }
+
+    @keyframes progress-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--vscode-descriptionForeground);
+    }
+
+    .progress-step-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      max-width: 200px;
+    }
+
     .grid-item-content {
       margin-bottom: 12px;
     }
@@ -1034,8 +1126,9 @@ export class DashboardPanel {
             <span>↻</span> ${this.t('refresh')}
           </button>
           ${rootPath ? `<button class="btn btn-primary" data-action="reveal" data-path="${this.escapeAttr(path.join(rootPath, 'WORKSPACE'))}">
-            <span>📂</span> ${this.t('workspace')}
+            📂 ${this.t('workspace')}
           </button>` : ''}
+          <button class="btn" data-action="importProject">📥 Import</button>
         </div>
       </header>
 
@@ -1086,6 +1179,36 @@ export class DashboardPanel {
 
       if (action === 'refresh') {
         vscode.postMessage({ type: 'refresh' });
+        return;
+      }
+
+      if (action === 'exportProject') {
+        vscode.postMessage({ type: 'exportProject', name: target.dataset.name, path: target.dataset.path });
+        return;
+      }
+
+      if (action === 'deleteProject') {
+        vscode.postMessage({ type: 'deleteProject', name: target.dataset.name, path: target.dataset.path });
+        return;
+      }
+
+      if (action === 'buildKB') {
+        vscode.postMessage({ type: 'buildKB', name: target.dataset.name, path: target.dataset.path });
+        return;
+      }
+
+      if (action === 'importProject') {
+        vscode.postMessage({ type: 'importProject' });
+        return;
+      }
+
+      if (action === 'importAgent') {
+        vscode.postMessage({ type: 'importAgent' });
+        return;
+      }
+
+      if (action === 'importWorkflow') {
+        vscode.postMessage({ type: 'importWorkflow' });
         return;
       }
 
@@ -1238,6 +1361,7 @@ export class DashboardPanel {
             <div class="grid-item-header">
               <div class="grid-item-title">${this.escapeHtml(project.name)}</div>
               ${project.knowledgeBase?.manifestPath ? '<span class="grid-item-badge">KB</span>' : ''}
+              ${project.missingKB ? '<span class="grid-item-badge" style="background: var(--vscode-errorForeground); color: var(--vscode-editor-background);">⚠ KB Missing</span>' : ''}
             </div>
             <div class="grid-item-content">
               <div class="grid-item-description">
@@ -1247,9 +1371,23 @@ export class DashboardPanel {
               <div class="grid-item-meta">
                 <span class="tag">📦 ${project.sizeFormatted}</span>
               </div>
+              ${project.workflow ? `
+              <div class="grid-item-progress">
+                <div class="progress-bar-outer">
+                  <div class="progress-bar-inner ${project.workflow.status}" style="width: ${project.workflow.percent}%"></div>
+                </div>
+                <div class="progress-info">
+                  <span class="progress-step-name">${this.escapeHtml(project.workflow.currentStep || project.workflow.workflow)}</span>
+                  <span>${project.workflow.percent}%</span>
+                </div>
+              </div>
+              ` : ''}
             </div>
             <div class="grid-item-footer">
               <span class="tag">${project.updatedAt}</span>
+              ${project.missingKB ? `<button class="btn" data-action="buildKB" data-name="${this.escapeAttr(project.name)}" data-path="${this.escapeAttr(project.path)}" style="color: var(--vscode-charts-green);">📚 构建知识库</button>` : ''}
+              <button class="btn" data-action="exportProject" data-name="${this.escapeAttr(project.name)}" data-path="${this.escapeAttr(project.path)}">📦 Export</button>
+              <button class="btn" data-action="deleteProject" data-name="${this.escapeAttr(project.name)}" data-path="${this.escapeAttr(project.path)}" style="color: var(--vscode-errorForeground);">🗑 Delete</button>
             </div>
           </div>
         `).join('')}
@@ -1269,7 +1407,11 @@ export class DashboardPanel {
     }
 
     return `
-      <div class="list fade-in">
+      <div class="fade-in">
+        <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+          <button class="btn" data-action="importAgent">📥 导入</button>
+        </div>
+        <div class="list">
         ${agents.map(agent => `
           <div class="list-item" data-action="open" data-path="${this.escapeAttr(agent.path)}">
             <div class="list-item-content">
@@ -1281,6 +1423,7 @@ export class DashboardPanel {
             </div>
           </div>
         `).join('')}
+        </div>
       </div>
     `;
   }
@@ -1290,7 +1433,8 @@ export class DashboardPanel {
 
     return `
       <div class="fade-in">
-        <div style="display: flex; justify-content: flex-end; margin-bottom: 16px;">
+        <div style="display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 16px;">
+          <button class="btn" data-action="importWorkflow">📥 导入</button>
           <button class="btn btn-primary" data-action="newWorkflow">+ New</button>
         </div>
         ${!workflows.length ? `
@@ -1529,7 +1673,7 @@ export class DashboardPanel {
       }
 
       // 提取项目名（从路径推断）
-      const projectMatch = statePath.match(/WORKSPACE[\\\/]([^\\\/]+)[\\\/]\.workflow_state\.json/);
+      const projectMatch = statePath.match(/WORKSPACE[\\/]([^\\/]+)[\\/]\\.workflow_state\\.json/);
       const projectName = projectMatch ? projectMatch[1] : undefined;
 
       return {
@@ -1728,6 +1872,37 @@ export class DashboardPanel {
         const projectPath = path.join(workspacePath, projectName);
         const agents = this.scanAgentWorkspaces(projectPath);
         const size = this.getDirSize(projectPath);
+        const knowledgeBase = this.scanKnowledgeBase(projectPath);
+
+        // 知识库缺失检测：涉及文档解析的项目必须生成知识库
+        const agentNames = agents.map(a => a.name);
+        const hasDocParsing = agentNames.some(name =>
+          name.includes('doc-content-analysis') || name.includes('doc-convertor')
+        );
+        const missingKB = hasDocParsing && !knowledgeBase;
+
+        // 工作流状态检测
+        const workflowStateFile = path.join(projectPath, '.workflow_state.json');
+        let workflow: WorkflowStateSummary | undefined;
+        if (fs.existsSync(workflowStateFile)) {
+          try {
+            const stateContent = fs.readFileSync(workflowStateFile, 'utf-8');
+            const state = JSON.parse(stateContent);
+            const current = state.current || {};
+            const steps = Array.isArray(state.steps) ? state.steps : [];
+            const totalSteps = steps.length || 1;
+            const completedSteps = steps.filter((s: { status: string }) => s.status === 'completed').length;
+            workflow = {
+              status: state.status || current.status || 'unknown',
+              percent: current.percent ?? Math.round((completedSteps / totalSteps) * 100),
+              currentStep: current.step || current.name || '',
+              workflow: state.workflow || '',
+              agent: current.agent || '',
+              steps
+            };
+          } catch { /* skip invalid */ }
+        }
+
         return {
           name: projectName,
           path: projectPath,
@@ -1736,7 +1911,9 @@ export class DashboardPanel {
           size,
           sizeFormatted: this.formatSize(size),
           updatedAt: this.formatUpdated(projectPath),
-          knowledgeBase: this.scanKnowledgeBase(projectPath),
+          knowledgeBase,
+          missingKB,
+          workflow,
           agents
         };
       })

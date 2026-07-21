@@ -963,17 +963,24 @@ class ASTToDocxConverter:
 
         import re
         ref_pattern = re.compile(r'(参考文献|references|bibliography)', re.IGNORECASE)
+        abstract_pattern = re.compile(r'(摘要|摘\s*要|abstract|提要)', re.IGNORECASE)
+        toc_pattern = re.compile(r'(目录|目\s*录|contents|table\s+of\s+contents)', re.IGNORECASE)
         cover_end = self._detect_real_cover_end()
 
         ref_start = count
+        abstract_start = count
         for i, p in enumerate(ast_paras):
             text = (p.get("text") or "").strip()
-            if ref_pattern.search(text):
+            if ref_pattern.search(text) and ref_start == count:
                 ref_start = i
+            if abstract_pattern.search(text) and abstract_start == count:
+                abstract_start = i
+            if ref_start < count and abstract_start < count:
                 break
 
         has_cover = cover_end > 0 and cover_end < count
 
+        # 封面结束：插入分节符
         if has_cover and cover_end < len(doc_paras):
             cover_last = doc_paras[cover_end - 1]._element
             ppr = cover_last.find(qn('w:pPr'))
@@ -984,6 +991,46 @@ class ASTToDocxConverter:
             self._set_section_properties(sect_pr, is_cover=True)
             ppr.append(sect_pr)
 
+        # 目录页：插入分页符
+        if toc_pattern.search((ast_paras[0].get("text") if ast_paras else "") or ""):
+            # TOC 在文档开头，已在封面后，无需额外处理
+            pass
+
+        # 摘要：插入分页符（确保摘要从新页面开始）
+        if abstract_start < count and abstract_start < len(doc_paras):
+            if abstract_start > 0:
+                prev_para = doc_paras[abstract_start - 1]._element
+                prev_ppr = prev_para.find(qn('w:pPr'))
+                if prev_ppr is None:
+                    prev_ppr = OxmlElement('w:pPr')
+                    prev_para.insert(0, prev_ppr)
+                existing_sect = False
+                for child in prev_ppr:
+                    tag_local = child.tag.split('}')[1] if '}' in child.tag else child.tag
+                    if tag_local in ('sectPr', 'pageBreakBefore'):
+                        existing_sect = True
+                        break
+                if not existing_sect:
+                    sect_pr = OxmlElement('w:sectPr')
+                    self._set_section_properties(sect_pr, is_toc=True)
+                    prev_ppr.append(sect_pr)
+
+            abstract_para = doc_paras[abstract_start]._element
+            ppr = abstract_para.find(qn('w:pPr'))
+            if ppr is None:
+                ppr = OxmlElement('w:pPr')
+                abstract_para.insert(0, ppr)
+            existing_pb = False
+            for child in ppr:
+                tag_local = child.tag.split('}')[1] if '}' in child.tag else child.tag
+                if tag_local == 'pageBreakBefore':
+                    existing_pb = True
+                    break
+            if not existing_pb:
+                pb = OxmlElement('w:pageBreakBefore')
+                ppr.append(pb)
+
+        # 参考文献：插入分节符 + 分页符
         if ref_start < count and ref_start < len(doc_paras):
             if ref_start > 0:
                 prev_para = doc_paras[ref_start - 1]._element

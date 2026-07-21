@@ -73,7 +73,8 @@ class ZeroFormatNormalizer:
             "heading": {
                 "level1": {"font": "黑体", "size": 14, "bold": True, "alignment": "center", "spacing_before": 24, "spacing_after": 18},
                 "level2": {"font": "黑体", "size": 12, "bold": True, "alignment": "left", "spacing_before": 18, "spacing_after": 12},
-                "level3": {"font": "宋体", "size": 12, "bold": True, "alignment": "left", "spacing_before": 12, "spacing_after": 6}
+                "level3": {"font": "黑体", "size": 12, "bold": True, "alignment": "left", "spacing_before": 12, "spacing_after": 6},
+                "level4": {"font": "黑体", "size": 12, "bold": True, "alignment": "left", "spacing_before": 6, "spacing_after": 6}
             },
             "paragraph": {
                 "alignment": "justify",
@@ -281,6 +282,8 @@ class ZeroFormatNormalizer:
         if not text:
             return None
 
+        if re.match(r'^\d+\.\d+\.\d+\.\d+\s+\S', text):
+            return 4
         if re.match(r'^\d+\.\d+\.\d+\s+\S', text):
             return 3
         elif re.match(r'^\d+\.\d+\s+\S', text):

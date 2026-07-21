@@ -183,6 +183,8 @@ class MarkdownConverter:
             )
 
             if result.returncode == 0:
+                # Post-process: insert page breaks for abstract/references
+                self._postprocess_docx(output_path)
                 return {
                     'success': True,
                     'output_path': output_path,
@@ -212,6 +214,49 @@ class MarkdownConverter:
         if result['success'] and result['has_math']:
             return str(temp_path)
         return input_path
+
+    def _postprocess_docx(self, docx_path: str):
+        """Post-process pandoc output: insert page breaks for abstract/TOC/references"""
+        try:
+            from docx import Document
+            from docx.oxml.ns import qn
+            from docx.oxml import OxmlElement
+            import re
+
+            doc = Document(docx_path)
+            abstract_pat = re.compile(r'(摘要|摘\s*要|abstract|提要)', re.IGNORECASE)
+            ref_pat = re.compile(r'(参考文献|references|bibliography)', re.IGNORECASE)
+
+            for para in doc.paragraphs:
+                text = (para.text or "").strip()
+                style_name = (para.style.name or "").lower()
+
+                # Only add page breaks to heading-styled paragraphs
+                if "heading" not in style_name and not text.startswith("#"):
+                    continue
+
+                is_abstract = abstract_pat.search(text)
+                is_ref = ref_pat.search(text)
+
+                if is_abstract or is_ref:
+                    ppr = para._element.find(qn('w:pPr'))
+                    if ppr is None:
+                        ppr = OxmlElement('w:pPr')
+                        para._element.insert(0, ppr)
+                    # Check if page break already exists
+                    existing = False
+                    for child in ppr:
+                        tag = child.tag.split('}')[1] if '}' in child.tag else child.tag
+                        if tag in ('pageBreakBefore', 'sectPr'):
+                            existing = True
+                            break
+                    if not existing:
+                        pb = OxmlElement('w:pageBreakBefore')
+                        ppr.append(pb)
+
+            doc.save(docx_path)
+        except Exception as e:
+            print(f"[WARN] Post-processing failed: {e}")
 
     def convert(self, input_path: str, output_path: str = None, template_config: dict = None) -> dict:
         if not os.path.exists(input_path):

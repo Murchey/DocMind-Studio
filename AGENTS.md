@@ -1,4 +1,4 @@
-﻿# 此文件用于调度所有的 AGENT
+# 此文件用于调度所有的 AGENT
 
 AGENTS 相当于 AGENT 能力的目录和工作方案的生成原则
 AGENT 相当于 SKILL 的能力目录
@@ -140,9 +140,29 @@ shutil.copy("用户文档路径", agent_ws / "input" / "input.docx")
 
 **ProjectName 命名**：从用户文档名或任务描述中提取，转为 PascalCase。如用户未指定，使用文档名。
 
-### 1. 知识库构建（支持增量更新）
+### 1. 知识库构建（项目级，支持多 Agent 注册）
 
-当用户需要将多个文档转换为结构化知识库时：
+知识库是**项目级**资源，位于 `WORKSPACE/{ProjectName}/knowledge-base/`，任何 Agent 均可通过 `register` 命令将自己的摘要注册到项目知识库中。
+
+**kb_manager.py CLI**：
+```bash
+# 首次构建（全量）
+python kb_manager.py init {kb_dir} {summary_dir} {manifest} --agent {agent_name}
+
+# 增量更新（对比 content_hash，+新增 / ~变更 / -删除 / =跳过）
+python kb_manager.py update {kb_dir} {summary_dir} {manifest} --agent {agent_name}
+
+# 跨 Agent 注册（其他 Agent 将摘要注册到已有知识库）
+python kb_manager.py register {kb_dir} {agent_name} {manifest} [--summary-dir {dir}]
+
+# 状态查询
+python kb_manager.py status {kb_dir} [--summary-dir {dir}] [--manifest {path}]
+
+# 知识查询（关键词/实体/文档/关系检索）
+python kb_manager.py query {kb_dir} {keywords|entities|documents|relations} {text}
+```
+
+> `kb_dir` 在项目级场景下统一为 `WORKSPACE/{ProjectName}/knowledge-base/`。
 
 **首次构建**：
 ```
@@ -150,9 +170,9 @@ shutil.copy("用户文档路径", agent_ws / "input" / "input.docx")
   Step 0: 创建 WORKSPACE/{ProjectName}/
   Step 1: doc-content-analysis（WORKSPACE/{ProjectName}/doc-content-analysis/）
       生成 manifest.json + summary.json（含 content_hash）
-  Step 2: knowledge-builder（kb_manager.py init）
-      全量构建 knowledge-base/
-  输出：knowledge-base/（含 .kb_state.json）
+  Step 2: kb_manager.py init（--agent doc-content-analysis）
+      全量构建 WORKSPACE/{ProjectName}/knowledge-base/
+  输出：WORKSPACE/{ProjectName}/knowledge-base/（含 .kb_state.json）
 ```
 
 **增量更新**（新增/修改/删除文档后）：
@@ -160,21 +180,30 @@ shutil.copy("用户文档路径", agent_ws / "input" / "input.docx")
 新文档 → doc-content-analysis（仅分析差异文档）
     ↓ 生成 manifest.json（含 content_hash）
     ↓
-kb_manager.py update
+kb_manager.py update --agent doc-content-analysis
     ↓ 对比 .kb_state.json 中的指纹
     ↓ +新增 / ~变更 / -删除 / =跳过
     ↓
 增量合并索引（不重建整个知识库）
     ↓
-knowledge-base/ 已更新（version += 1）
+WORKSPACE/{ProjectName}/knowledge-base/ 已更新（version += 1）
+```
+
+**跨 Agent 注册**（其他 Agent 将摘要汇入项目知识库）：
+```
+excel-master / ppt-master / doc-form-master 等 Agent 完成后
+    ↓
+kb_manager.py register {kb_dir} {agent_name} {manifest} --summary-dir {dir}
+    ↓
+项目知识库聚合多 Agent 成果
 ```
 
 **状态查询**：
 ```bash
 python ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py status \
-  knowledge-base/ \
-  WORKSPACE/{ProjectName}/doc-content-analysis/summary/ \
-  WORKSPACE/{ProjectName}/doc-content-analysis/summary/manifest.json
+  WORKSPACE/{ProjectName}/knowledge-base/ \
+  --summary-dir WORKSPACE/{ProjectName}/doc-content-analysis/summary/ \
+  --manifest WORKSPACE/{ProjectName}/doc-content-analysis/summary/manifest.json
 ```
 
 **触发关键词**：知识库、结构化、文档总结、批量处理、关键词提取、概念索引、增量更新
@@ -184,14 +213,38 @@ python ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_
 import subprocess
 from pathlib import Path
 
-ws = Path(f"WORKSPACE/{project_name}/doc-content-analysis/summary/")
-kb_dir = Path("knowledge-base/")
+project_name = "ExampleProject"
+ws = Path(f"WORKSPACE/{project_name}")
+summary_dir = ws / "doc-content-analysis" / "summary"
+kb_dir = ws / "knowledge-base"
 kb_script = Path("ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py")
 
-# 增量更新（自动检测 init 还是 update）
+# 首次构建（--agent 标识来源）
+subprocess.run([
+    "python", str(kb_script), "init",
+    str(kb_dir), str(summary_dir), str(summary_dir / "manifest.json"),
+    "--agent", "doc-content-analysis"
+], check=True)
+
+# 增量更新
 subprocess.run([
     "python", str(kb_script), "update",
-    str(kb_dir), str(ws), str(ws / "manifest.json")
+    str(kb_dir), str(summary_dir), str(summary_dir / "manifest.json"),
+    "--agent", "doc-content-analysis"
+], check=True)
+
+# 跨 Agent 注册（例如 excel-master 完成后）
+excel_summary = ws / "excel-master" / "summary"
+subprocess.run([
+    "python", str(kb_script), "register",
+    str(kb_dir), "excel-master", str(excel_summary / "manifest.json"),
+    "--summary-dir", str(excel_summary)
+], check=True)
+
+# 知识查询
+subprocess.run([
+    "python", str(kb_script), "query",
+    str(kb_dir), "keywords", "氯苯那敏"
 ], check=True)
 ```
 
@@ -226,8 +279,9 @@ subprocess.run([
   Step 2: excel-master（表格对比 + 图表）
   Step 3: doc-form-master（研究报告）
   Step 4: ppt-master（汇报PPT）
-  Step 5: KnowledgeBuilderWorkflow（知识库构建）
-  输出：WORKSPACE/{ProjectName}/ppt-master/output/ + knowledge-base/
+  Step 5: kb_manager.py init --agent doc-content-analysis（项目知识库首次构建）
+          各 Agent 完成后通过 register 汇入项目知识库
+  输出：WORKSPACE/{ProjectName}/ppt-master/output/ + WORKSPACE/{ProjectName}/knowledge-base/
 ```
 
 **触发关键词**：会议纪要、企业报告、表格对比、研究报告、汇报PPT、市场分析
@@ -240,6 +294,8 @@ def execute_enterprise_docs(project_name: str, materials: list, tables: list):
     import subprocess
     
     ws = Path(f"WORKSPACE/{project_name}")
+    kb_dir = ws / "knowledge-base"
+    kb_script = Path("ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py")
     
     # Step 1: 内容提取
     for mat in materials:
@@ -255,7 +311,28 @@ def execute_enterprise_docs(project_name: str, materials: list, tables: list):
             str(tbl)
         ], check=True)
     
-    # Step 3-5: 报告、PPT、知识库...
+    # Step 3-4: 报告、PPT...
+    
+    # Step 5: 知识库构建（项目级）
+    # doc-content-analysis 初始化知识库
+    summary_dir = ws / "doc-content-analysis" / "summary"
+    manifest = summary_dir / "manifest.json"
+    if manifest.exists():
+        subprocess.run([
+            "python", str(kb_script), "init",
+            str(kb_dir), str(summary_dir), str(manifest),
+            "--agent", "doc-content-analysis"
+        ], check=True)
+    
+    # 其他 Agent 注册到项目知识库
+    for agent_name in ["excel-master", "ppt-master"]:
+        agent_manifest = ws / agent_name / "summary" / "manifest.json"
+        if agent_manifest.exists():
+            subprocess.run([
+                "python", str(kb_script), "register",
+                str(kb_dir), agent_name, str(agent_manifest),
+                "--summary-dir", str(ws / agent_name / "summary")
+            ], check=True)
 ```
 
 ### 5. 竞赛资源处理
@@ -273,8 +350,8 @@ def execute_enterprise_docs(project_name: str, materials: list, tables: list):
   Step 3d: 策略矩阵匹配 → ppt_config.json
   核心点提取（每页 ≤ 5 条 × ≤ 15 字）
   Step 5: ppt-master（生成精简型 PPT）
-  Step 6: KnowledgeBuilderWorkflow（知识库构建）
-  输出：WORKSPACE/{ProjectName}/ppt-master/output/ + knowledge-base/
+  Step 6: kb_manager.py init --agent doc-content-analysis（项目知识库构建）
+  输出：WORKSPACE/{ProjectName}/ppt-master/output/ + WORKSPACE/{ProjectName}/knowledge-base/
 ```
 
 **触发关键词**：竞赛、答辩、项目书、资源包、ZIP、7Z
@@ -330,7 +407,9 @@ def execute_competition(project_name: str, zip_file: str = None, ppt_type: str =
     # 将 summary.md + ppt_type.json 复制到 ppt-master/input/
     # 加载 ppt-master-main/AGENT.md 执行生成流程（传入 ppt_type 控制风格）
     
-    # Step 5: 知识库构建
+    # Step 5: 知识库构建（项目级）
+    kb_dir = ws / "knowledge-base"
+    kb_script = Path("ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py")
     summary_dir = ws / "doc-content-analysis" / "summary"
     manifest = summary_dir / "manifest.json"
     if manifest.exists():
@@ -338,10 +417,9 @@ def execute_competition(project_name: str, zip_file: str = None, ppt_type: str =
             data = json.load(f)
         if data.get("status") == "completed":
             subprocess.run([
-                "python",
-                "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py",
-                "update", "knowledge-base/",
-                str(summary_dir), str(manifest)
+                "python", str(kb_script), "init",
+                str(kb_dir), str(summary_dir), str(manifest),
+                "--agent", "doc-content-analysis"
             ], check=True)
 ```
 

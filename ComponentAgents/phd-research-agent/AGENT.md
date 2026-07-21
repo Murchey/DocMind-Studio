@@ -71,6 +71,18 @@ WORKSPACE/{ProjectName}/phd-research-agent/
   - `<task_type>_result.json`：结构化结果
   - `<task_type>_result.md`：可读报告
 
+### Step 4: 知识库注册（可选）
+- **目的**：将本 Agent 的分析结果注册到项目知识库，供其他 Agent 查询引用
+- **执行命令**：
+  ```bash
+  python SKILLS/knowledge-builder/scripts/kb_manager.py register \
+    {workspace}/../knowledge-base/ \
+    phd-research-agent \
+    {workspace}/summary/manifest.json \
+    --summary-dir {workspace}/summary/
+  ```
+- **说明**：注册后知识库可被下游 Agent（如 ppt-master）检索和引用
+
 ## 核心规则
 
 ### 处理规则

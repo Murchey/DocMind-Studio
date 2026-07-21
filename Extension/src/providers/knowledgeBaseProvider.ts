@@ -54,7 +54,7 @@ export class KnowledgeBaseProvider implements vscode.TreeDataProvider<ResultItem
         kind: 'project',
         description: this.describeProject(projectPath),
         collapsible: vscode.TreeItemCollapsibleState.Collapsed
-      });
+      }, undefined, true);
     });
 
     return projects.length ? projects : [this.emptyItem('No generated projects yet')];
@@ -251,7 +251,7 @@ export class KnowledgeBaseProvider implements vscode.TreeDataProvider<ResultItem
 }
 
 class ResultItem extends vscode.TreeItem {
-  constructor(public readonly node: ResultNode, iconName?: string) {
+  constructor(public readonly node: ResultNode, iconName?: string, exportable?: boolean) {
     super(node.label, node.collapsible);
     this.filePath = node.filePath;
     this.description = node.description;
@@ -266,8 +266,9 @@ class ResultItem extends vscode.TreeItem {
       };
     }
 
+    const exportFlag = exportable ? ' docmindExportable' : '';
     this.contextValue = node.filePath
-      ? `${node.kind} docmindOpenable docmindRevealable`
+      ? `${node.kind} docmindOpenable docmindRevealable${exportFlag}`
       : node.kind;
   }
 
