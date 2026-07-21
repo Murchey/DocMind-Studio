@@ -127,56 +127,117 @@ python ComponentAgents/doc-form-master-main/SKILLS/pdf-export/scripts/pdf_export
 ## 调度代码示例
 
 ```python
+import shutil, subprocess, json, sys
+from pathlib import Path
+
 def execute_academic_docs(project_name: str, user_requirement: str, materials: list):
     """执行AcademicDocs工作流"""
-    from pathlib import Path
-    import subprocess
-    
-    ws = Path(f"WORKSPACE/{project_name}")
-    
-    # Step 1: 材料提取
+    root = Path("d:/Projects/vibecoding/DocMind-Studio")
+    ws = root / "WORKSPACE" / project_name
+    ws.mkdir(parents=True, exist_ok=True)
+
+    # ⚠️ 进度追踪初始化（强制 —— 插件Dashboard数据来源）
+    sys.path.insert(0, str(root / 'ComponentAgents' / 'process-skill' / 'scripts'))
+    from progress_tracker import ProgressTracker
+    tracker = ProgressTracker(root=str(root / "WORKSPACE"))
+    task_id = tracker.create_task(
+        project=project_name,
+        workflow="AcademicDocsWorkflow",
+        agent="doc-content-analysis",
+        steps=[
+            {"id": "workspace-init", "name": "创建工作区"},
+            {"id": "material-extraction", "name": "材料内容提取"},
+            {"id": "research-analysis", "name": "论文研究分析（phd-research-agent）"},
+            {"id": "format-output", "name": "格式标准化输出"},
+            {"id": "knowledge-build", "name": "知识库构建（可选）"},
+        ]
+    )
+    tracker.complete_step(task_id=task_id, step_id="workspace-init", message="工作区创建完成")
+
+    # 创建各 Agent 子目录
+    for agent in ["doc-content-analysis", "phd-research-agent", "doc-form-master"]:
+        (ws / agent / "input").mkdir(parents=True, exist_ok=True)
+        (ws / agent / "summary").mkdir(parents=True, exist_ok=True)
+        (ws / agent / "output").mkdir(parents=True, exist_ok=True)
+
+    # 复制用户文档到 doc-content-analysis/input/
+    for mat in materials:
+        shutil.copy(str(mat), str(ws / "doc-content-analysis" / "input" / mat.name))
+
+    # ==================== Step 1: 材料提取 ====================
+    tracker.step_start(task_id=task_id, step_id="material-extraction", message="开始材料内容提取")
     for mat in materials:
         subprocess.run([
-            "python", "ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py",
+            "python", str(root / "ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py"),
             str(mat)
         ], check=True)
-    
-    # Step 2: 论文评审（根据需求类型）
-    if "评审" in user_requirement or "修改" in user_requirement:
-        subprocess.run([
-            "python", "ComponentAgents/phd-research-agent/SKILLS/pre-submission-reviewer/scripts/reviewer.py",
-            str(ws / "doc-content-analysis/summary/draft.md")
-        ], check=True)
-    
-    # Step 3: 格式标准化
-    subprocess.run([
-        "python", "ComponentAgents/doc-form-master-main/SKILLS/markdown-converter/scripts/md_converter.py",
-        str(ws / "phd-research-agent/summary/review_result.md")
-    ], check=True)
-    
-    # Step 4: 知识库构建（可选）
+    tracker.complete_step(task_id=task_id, step_id="material-extraction", message="材料内容提取完成")
+
+    # ==================== Step 2: phd-research-agent 论文研究分析 ====================
+    tracker.step_start(task_id=task_id, step_id="research-analysis", message="开始论文研究分析")
+
+    # 2a. 将 doc-content-analysis 的 summary/*.md 传递到 phd-research-agent/input/
+    upstream_summary = ws / "doc-content-analysis" / "summary"
+    manifest_path = upstream_summary / "manifest.json"
+    if manifest_path.exists():
+        with open(manifest_path, 'r', encoding='utf-8') as f:
+            manifest = json.load(f)
+        for doc in manifest.get("documents", []):
+            if doc.get("status") == "success" and doc.get("summary_md"):
+                src = Path(doc["summary_md"])
+                if src.exists():
+                    shutil.copy(str(src), str(ws / "phd-research-agent" / "input" / src.name))
+
+    # 2b. 根据用户需求选择 phd-research-agent 的 SKILL（必须加载 Agent 的 AGENT.md 执行）
+    #   - 研究想法 → idea-evaluator
+    #   - 论文草稿审阅 → pre-submission-reviewer
+    #   - Introduction 起草 → intro-drafter
+    #   - 开题报告/文献综述 → pre-submission-reviewer + AI 综合分析
+    # 加载 ComponentAgents/phd-research-agent/AGENT.md，按其执行流程处理
+    # 输出写入 ws / "phd-research-agent" / "summary/"
+
+    tracker.complete_step(task_id=task_id, step_id="research-analysis", message="论文研究分析完成")
+
+    # ==================== Step 3: 格式标准化输出 ====================
+    tracker.step_start(task_id=task_id, step_id="format-output", message="开始格式标准化输出")
+    # 将 phd-research-agent 的输出复制到 doc-form-master/input/
+    phd_summary = ws / "phd-research-agent" / "summary"
+    for md_file in phd_summary.glob("*.md"):
+        shutil.copy(str(md_file), str(ws / "doc-form-master" / "input" / md_file.name))
+    # MD → DOCX（使用 markitdown-converter）
+    # 格式标准化（使用 format-normalizer）
+    # PDF导出（使用 pdf-export，可选）
+    tracker.complete_step(task_id=task_id, step_id="format-output", message="格式标准化输出完成")
+
+    # ==================== Step 4: 知识库构建（可选） ====================
     if len(materials) > 5:
+        tracker.step_start(task_id=task_id, step_id="knowledge-build", message="开始知识库构建")
         subprocess.run([
-            "python", "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py",
-            "update", "knowledge-base/", str(ws / "doc-content-analysis/summary/"), 
+            "python", str(root / "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py"),
+            "update", "knowledge-base/", str(ws / "doc-content-analysis/summary/"),
             str(ws / "doc-content-analysis/summary/manifest.json")
         ], check=True)
+        tracker.complete_step(task_id=task_id, step_id="knowledge-build", message="知识库构建完成")
+
+    # 任务完成
+    tracker.complete_task(task_id=task_id, message="学术文档处理完成")
 ```
 
 ---
 
 ## 独立Agent调用点汇总
 
-| 场景 | 独立调用Agent | 用途 |
-|------|--------------|------|
-| 提取单个材料 | `doc-content-analysis` | 内容提取 |
-| 评估研究想法 | `phd-research-agent` + `idea-evaluator` | idea评分 |
-| 论文审阅 | `phd-research-agent` + `pre-submission-reviewer` | 修改建议 |
-| 起草Introduction | `phd-research-agent` + `intro-drafter` | 写作辅助 |
-| 格式转换 | `doc-form-master` + `markdown-converter` | MD→DOCX |
-| 格式标准化 | `doc-form-master` + `format-normalizer` | 排版优化 |
-| 导出PDF | `doc-form-master` + `pdf-export` | 最终输出 |
-| 构建知识库 | `KnowledgeBuilderWorkflow` | 增量更新 |
+| 场景 | 独立调用Agent | SKILL | 用途 |
+|------|--------------|-------|------|
+| 提取单个材料 | `doc-content-analysis` | doc-convertor | 内容提取 |
+| 评估研究想法 | `phd-research-agent` | idea-evaluator | idea评分 |
+| 论文审阅 | `phd-research-agent` | pre-submission-reviewer | 修改建议 |
+| 起草Introduction | `phd-research-agent` | intro-drafter | 写作辅助 |
+| 生成开题报告/文献综述 | `phd-research-agent` | pre-submission-reviewer + AI综合分析 | 开题报告/文献综述生成 |
+| 格式转换 | `doc-form-master` | markitdown-converter | MD→DOCX |
+| 格式标准化 | `doc-form-master` | format-normalizer | 排版优化 |
+| 导出PDF | `doc-form-master` | pdf-export | 最终输出 |
+| 构建知识库 | `KnowledgeBuilderWorkflow` | kb_manager.py | 增量更新 |
 
 ---
 

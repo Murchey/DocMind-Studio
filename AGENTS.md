@@ -93,6 +93,39 @@ DocMind-Studio/                        # 根目录
 
 ## 调度规则
 
+### ⚠️ 强制规范：进度同步（所有调度必须遵守）
+
+**每个调度代码示例和实际执行中，必须在每个 Step 前后调用进度追踪器。** 这是插件 Dashboard 显示任务进度的唯一数据来源，跳过此步骤将导致用户在插件上看不到任何进度。
+
+**最小进度同步模式**（每个 Step 必须包含）：
+
+```python
+# Step 开始
+tracker.step_start(task_id=task_id, step_id="step-id", message="步骤名称开始")
+
+# ... 执行 Step 内容 ...
+
+# Step 完成
+tracker.complete_step(task_id=task_id, step_id="step-id", message="步骤名称完成")
+```
+
+**完整进度同步模式**（长时间步骤建议使用）：
+
+```python
+# Step 开始
+tracker.step_start(task_id=task_id, step_id="step-id", message="步骤名称开始")
+
+# ... 执行中（可选进度更新） ...
+tracker.step_progress(task_id=task_id, step_id="step-id", percent=50, message="处理中...")
+
+# Step 完成
+tracker.complete_step(task_id=task_id, step_id="step-id", message="步骤名称完成")
+```
+
+**所有调度代码示例中的 `subprocess.run()` 调用，都必须被 `tracker.step_start()` 和 `tracker.complete_step()` 包裹。**
+
+---
+
 ### 0. 工作区初始化（所有调度通用）
 
 在调度任何 AGENT 之前，AGENTS.md 必须先创建项目工作区：
@@ -210,7 +243,7 @@ python ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_
 
 **调度代码示例**：
 ```python
-import subprocess
+import subprocess, sys
 from pathlib import Path
 
 project_name = "ExampleProject"
@@ -219,19 +252,38 @@ summary_dir = ws / "doc-content-analysis" / "summary"
 kb_dir = ws / "knowledge-base"
 kb_script = Path("ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py")
 
-# 首次构建（--agent 标识来源）
+# 初始化进度追踪（强制）
+root = Path("d:/Projects/vibecoding/DocMind-Studio")
+sys.path.insert(0, str(root / 'ComponentAgents' / 'process-skill' / 'scripts'))
+from progress_tracker import ProgressTracker
+tracker = ProgressTracker(root=str(root / "WORKSPACE"))
+task_id = tracker.create_task(
+    project=project_name, workflow="KnowledgeBuilderWorkflow", agent="doc-content-analysis",
+    steps=[
+        {"id": "workspace-init", "name": "创建项目工作区"},
+        {"id": "kb-init", "name": "知识库首次构建"},
+        {"id": "kb-update", "name": "知识库增量更新"},
+    ]
+)
+tracker.complete_step(task_id=task_id, step_id="workspace-init", message="工作区创建完成")
+
+# 首次构建（含进度同步）
+tracker.step_start(task_id=task_id, step_id="kb-init", message="开始知识库首次构建")
 subprocess.run([
     "python", str(kb_script), "init",
     str(kb_dir), str(summary_dir), str(summary_dir / "manifest.json"),
     "--agent", "doc-content-analysis"
 ], check=True)
+tracker.complete_step(task_id=task_id, step_id="kb-init", message="知识库首次构建完成")
 
-# 增量更新
+# 增量更新（含进度同步）
+tracker.step_start(task_id=task_id, step_id="kb-update", message="开始知识库增量更新")
 subprocess.run([
     "python", str(kb_script), "update",
     str(kb_dir), str(summary_dir), str(summary_dir / "manifest.json"),
     "--agent", "doc-content-analysis"
 ], check=True)
+tracker.complete_step(task_id=task_id, step_id="kb-update", message="知识库增量更新完成")
 
 # 跨 Agent 注册（例如 excel-master 完成后）
 excel_summary = ws / "excel-master" / "summary"
@@ -241,11 +293,8 @@ subprocess.run([
     "--summary-dir", str(excel_summary)
 ], check=True)
 
-# 知识查询
-subprocess.run([
-    "python", str(kb_script), "query",
-    str(kb_dir), "keywords", "氯苯那敏"
-], check=True)
+# 任务完成
+tracker.complete_task(task_id=task_id, message="知识库构建完成")
 ```
 
 ### 2. 文档格式处理
@@ -260,12 +309,109 @@ subprocess.run([
 
 ### 3. 学术文档处理
 
-当用户需要处理学术论文、文献时：
+当用户需要处理学术论文、文献、开题报告、论文评审时：
 
 ```
 用户文档 → AcademicDocsWorkflow
-  Step 0: 创建 WORKSPACE/{ProjectName}/
+  Step 0: 创建 WORKSPACE/{ProjectName}/ + 初始化进度追踪
+  Step 1: doc-content-analysis（材料提取：PDF/DOCX → 内容提取 + AI 总结）
+  Step 2: phd-research-agent（论文评审/idea评估/Introduction起草/开题报告生成）
+  Step 3: doc-form-master（格式标准化：MD → 格式化 DOCX/PDF）
+  Step 4: 知识库构建（可选）
   输出：WORKSPACE/{ProjectName}/doc-form-master/output/
+```
+
+**触发关键词**：论文、学术、评审、开题报告、文献综述、Introduction、idea评估、格式化论文
+
+**phd-research-agent 调度说明**：
+- 包含研究想法 → 调用 `idea-evaluator` SKILL
+- 包含论文草稿需审阅 → 调用 `pre-submission-reviewer` SKILL
+- 需要起草 Introduction → 调用 `intro-drafter` SKILL
+- 需要生成开题报告/文献综述 → 调用 `pre-submission-reviewer` + AI 综合分析
+
+**调度代码示例**：
+```python
+import shutil, subprocess, json
+from pathlib import Path
+
+# 0. 初始化（含进度追踪 —— 强制）
+root = Path("d:/Projects/vibecoding/DocMind-Studio")
+ws = root / "WORKSPACE" / project_name
+ws.mkdir(parents=True, exist_ok=True)
+
+import sys
+sys.path.insert(0, str(root / 'ComponentAgents' / 'process-skill' / 'scripts'))
+from progress_tracker import ProgressTracker
+tracker = ProgressTracker(root=str(root / "WORKSPACE"))
+task_id = tracker.create_task(
+    project=project_name,
+    workflow="AcademicDocsWorkflow",
+    agent="doc-content-analysis",
+    steps=[
+        {"id": "workspace-init", "name": "创建项目工作区"},
+        {"id": "material-extraction", "name": "材料内容提取"},
+        {"id": "research-analysis", "name": "论文研究分析（phd-research-agent）"},
+        {"id": "format-output", "name": "格式标准化输出"},
+    ]
+)
+tracker.complete_step(task_id=task_id, step_id="workspace-init", message="工作区创建完成")
+
+# 创建各 Agent 子目录
+for agent in ["doc-content-analysis", "phd-research-agent", "doc-form-master"]:
+    (ws / agent / "input").mkdir(parents=True, exist_ok=True)
+    (ws / agent / "summary").mkdir(parents=True, exist_ok=True)
+    (ws / agent / "output").mkdir(parents=True, exist_ok=True)
+
+# 复制用户文档
+for mat in materials:
+    shutil.copy(str(mat), str(ws / "doc-content-analysis" / "input" / mat.name))
+
+# Step 1: 材料提取（含进度同步）
+tracker.step_start(task_id=task_id, step_id="material-extraction", message="开始材料内容提取")
+subprocess.run([
+    "python", "ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py",
+    "process_all",
+    str(ws / "doc-content-analysis" / "input"),
+    str(ws / "doc-content-analysis")
+], check=True)
+tracker.complete_step(task_id=task_id, step_id="material-extraction", message="材料内容提取完成")
+
+# Step 2: 论文研究分析 —— phd-research-agent（含进度同步）
+tracker.step_start(task_id=task_id, step_id="research-analysis", message="开始论文研究分析")
+# 将 doc-content-analysis 的 summary.md 传递到 phd-research-agent/input/
+upstream_summary = ws / "doc-content-analysis" / "summary"
+manifest_path = upstream_summary / "manifest.json"
+if manifest_path.exists():
+    with open(manifest_path, 'r', encoding='utf-8') as f:
+        manifest = json.load(f)
+    for doc in manifest.get("documents", []):
+        if doc.get("status") == "success" and doc.get("summary_md"):
+            src = Path(doc["summary_md"])
+            if src.exists():
+                shutil.copy(str(src), str(ws / "phd-research-agent" / "input" / src.name))
+
+# 根据任务类型选择 phd-research-agent 的 SKILL
+# （由调度器根据用户需求判断：idea评估 / 论文审阅 / Introduction起草 / 开题报告生成）
+# 加载 ComponentAgents/phd-research-agent/AGENT.md 执行对应 SKILL
+# 输出写入 ws / "phd-research-agent" / "summary/"
+tracker.complete_step(task_id=task_id, step_id="research-analysis", message="论文研究分析完成")
+
+# Step 3: 格式标准化（含进度同步）
+tracker.step_start(task_id=task_id, step_id="format-output", message="开始格式标准化输出")
+# 将 phd-research-agent 的输出复制到 doc-form-master/input/
+phd_summary = ws / "phd-research-agent" / "summary"
+for md_file in phd_summary.glob("*.md"):
+    shutil.copy(str(md_file), str(ws / "doc-form-master" / "input" / md_file.name))
+# MD → DOCX
+subprocess.run([
+    "python", "ComponentAgents/doc-form-master-main/SKILLS/markitdown-converter/scripts/markitdown_converter.py",
+    str(ws / "doc-form-master" / "input" / "*.md"),
+    str(ws / "doc-form-master" / "output" / "output.docx")
+], check=True)
+tracker.complete_step(task_id=task_id, step_id="format-output", message="格式标准化输出完成")
+
+# 任务完成
+tracker.complete_task(task_id=task_id, message="学术文档处理完成")
 ```
 
 ### 4. 企业文档处理
@@ -288,33 +434,62 @@ subprocess.run([
 
 **调度代码示例**：
 ```python
+import shutil, subprocess, json, sys
+from pathlib import Path
+
 def execute_enterprise_docs(project_name: str, materials: list, tables: list):
     """执行EnterpriseDocs工作流"""
-    from pathlib import Path
-    import subprocess
-    
-    ws = Path(f"WORKSPACE/{project_name}")
+    root = Path("d:/Projects/vibecoding/DocMind-Studio")
+    ws = root / "WORKSPACE" / project_name
     kb_dir = ws / "knowledge-base"
-    kb_script = Path("ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py")
-    
-    # Step 1: 内容提取
+    kb_script = root / "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py"
+
+    # 初始化进度追踪（强制）
+    sys.path.insert(0, str(root / 'ComponentAgents' / 'process-skill' / 'scripts'))
+    from progress_tracker import ProgressTracker
+    tracker = ProgressTracker(root=str(root / "WORKSPACE"))
+    task_id = tracker.create_task(
+        project=project_name, workflow="EnterpriseDocsWorkflow", agent="doc-content-analysis",
+        steps=[
+            {"id": "workspace-init", "name": "创建工作区"},
+            {"id": "content-extraction", "name": "文档内容提取"},
+            {"id": "excel-analysis", "name": "表格对比分析"},
+            {"id": "report-generation", "name": "研究报告生成"},
+            {"id": "ppt-generation", "name": "汇报PPT生成"},
+            {"id": "knowledge-build", "name": "知识库构建"},
+        ]
+    )
+    tracker.complete_step(task_id=task_id, step_id="workspace-init", message="工作区创建完成")
+
+    # Step 1: 内容提取（含进度同步）
+    tracker.step_start(task_id=task_id, step_id="content-extraction", message="开始文档内容提取")
     for mat in materials:
         subprocess.run([
-            "python", "ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py",
+            "python", str(root / "ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py"),
             str(mat)
         ], check=True)
-    
-    # Step 2: 表格对比
+    tracker.complete_step(task_id=task_id, step_id="content-extraction", message="文档内容提取完成")
+
+    # Step 2: 表格对比（含进度同步）
+    tracker.step_start(task_id=task_id, step_id="excel-analysis", message="开始表格对比分析")
     for tbl in tables:
         subprocess.run([
-            "python", "ComponentAgents/excel-master-main/skills/excel_chart/scripts/generate_chart.py",
+            "python", str(root / "ComponentAgents/excel-master-main/skills/excel_chart/scripts/generate_chart.py"),
             str(tbl)
         ], check=True)
-    
-    # Step 3-4: 报告、PPT...
-    
-    # Step 5: 知识库构建（项目级）
-    # doc-content-analysis 初始化知识库
+    tracker.complete_step(task_id=task_id, step_id="excel-analysis", message="表格对比分析完成")
+
+    # Step 3-4: 报告、PPT...（含进度同步）
+    tracker.step_start(task_id=task_id, step_id="report-generation", message="开始研究报告生成")
+    # ... doc-form-master 生成研究报告
+    tracker.complete_step(task_id=task_id, step_id="report-generation", message="研究报告生成完成")
+
+    tracker.step_start(task_id=task_id, step_id="ppt-generation", message="开始汇报PPT生成")
+    # ... ppt-master 生成汇报PPT
+    tracker.complete_step(task_id=task_id, step_id="ppt-generation", message="汇报PPT生成完成")
+
+    # Step 5: 知识库构建（含进度同步）
+    tracker.step_start(task_id=task_id, step_id="knowledge-build", message="开始知识库构建")
     summary_dir = ws / "doc-content-analysis" / "summary"
     manifest = summary_dir / "manifest.json"
     if manifest.exists():
@@ -323,8 +498,6 @@ def execute_enterprise_docs(project_name: str, materials: list, tables: list):
             str(kb_dir), str(summary_dir), str(manifest),
             "--agent", "doc-content-analysis"
         ], check=True)
-    
-    # 其他 Agent 注册到项目知识库
     for agent_name in ["excel-master", "ppt-master"]:
         agent_manifest = ws / agent_name / "summary" / "manifest.json"
         if agent_manifest.exists():
@@ -333,6 +506,10 @@ def execute_enterprise_docs(project_name: str, materials: list, tables: list):
                 str(kb_dir), agent_name, str(agent_manifest),
                 "--summary-dir", str(ws / agent_name / "summary")
             ], check=True)
+    tracker.complete_step(task_id=task_id, step_id="knowledge-build", message="知识库构建完成")
+
+    # 任务完成
+    tracker.complete_task(task_id=task_id, message="企业文档处理完成")
 ```
 
 ### 5. 竞赛资源处理
@@ -358,22 +535,40 @@ def execute_enterprise_docs(project_name: str, materials: list, tables: list):
 
 **调度代码示例**：
 ```python
-import shutil, subprocess, json
+import shutil, subprocess, json, sys
 from pathlib import Path
 
 SUPPORTED_FORMATS = {".doc", ".docx", ".pdf", ".txt", ".md", ".pptx", ".xlsx"}
 
 def execute_competition(project_name: str, zip_file: str = None, ppt_type: str = None):
     """执行CompetitionWorkflow"""
-    ws = Path(f"WORKSPACE/{project_name}")
+    root = Path("d:/Projects/vibecoding/DocMind-Studio")
+    ws = root / "WORKSPACE" / project_name
     ws.mkdir(parents=True, exist_ok=True)
-    
+
+    # 初始化进度追踪（强制）
+    sys.path.insert(0, str(root / 'ComponentAgents' / 'process-skill' / 'scripts'))
+    from progress_tracker import ProgressTracker
+    tracker = ProgressTracker(root=str(root / "WORKSPACE"))
+    task_id = tracker.create_task(
+        project=project_name, workflow="CompetitionWorkflow", agent="doc-content-analysis",
+        steps=[
+            {"id": "workspace-init", "name": "创建工作区"},
+            {"id": "content-extraction", "name": "项目书内容提取"},
+            {"id": "ppt-config", "name": "PPT策略配置"},
+            {"id": "ppt-generation", "name": "PPT生成"},
+            {"id": "knowledge-build", "name": "知识库构建"},
+        ]
+    )
+    tracker.complete_step(task_id=task_id, step_id="workspace-init", message="工作区创建完成")
+
     # Step 0: 初始化子目录
     for agent in ["doc-content-analysis", "ppt-master"]:
         (ws / agent / "input").mkdir(parents=True, exist_ok=True)
         (ws / agent / "output").mkdir(parents=True, exist_ok=True)
-    
-    # Step 1: 解压或直接使用文档
+
+    # Step 1: 解压或直接使用文档（含进度同步）
+    tracker.step_start(task_id=task_id, step_id="content-extraction", name="开始项目书内容提取")
     if zip_file and Path(zip_file).exists():
         input_dir = ws / "input"
         input_dir.mkdir(exist_ok=True)
@@ -381,19 +576,22 @@ def execute_competition(project_name: str, zip_file: str = None, ppt_type: str =
         for f in input_dir.rglob("*"):
             if f.is_file() and f.suffix.lower() in SUPPORTED_FORMATS:
                 shutil.copy2(f, ws / "doc-content-analysis" / "input" / f.name)
-    
+
     # 检查输入是否为空
     if not list((ws / "doc-content-analysis" / "input").iterdir()):
         print("无可处理文档，工作流终止")
+        tracker.complete_task(task_id=task_id, message="无可处理文档，工作流终止")
         return
-    
-    # Step 2: 内容提取（加载 doc-content-analysis/AGENT.md）
-    # ... doc-convertor + AI 总结 → summary/ + manifest.json
 
-    # Step 3: PPT 类型选择（用户交互）
+    # Step 2: 内容提取
+    # ... doc-convertor + AI 总结 → summary/ + manifest.json
+    tracker.complete_step(task_id=task_id, step_id="content-extraction", message="项目书内容提取完成")
+
+    # Step 3: PPT 类型选择 —— 用户交互（含进度同步）
+    tracker.step_start(task_id=task_id, step_id="ppt-config", message="开始PPT策略配置")
     if ppt_type is None:
         ppt_type = "defense"  # 默认答辩型
-    
+
     # 写入 ppt_type.json
     ppt_type_path = ws / "ppt-master" / "input" / "ppt_type.json"
     ppt_type_path.parent.mkdir(parents=True, exist_ok=True)
@@ -402,14 +600,18 @@ def execute_competition(project_name: str, zip_file: str = None, ppt_type: str =
             "type": ppt_type,
             "label": "介绍型 PPT" if ppt_type == "introduction" else "答辩型 PPT"
         }, f, ensure_ascii=False, indent=2)
-    
-    # Step 4: PPT生成
+    tracker.complete_step(task_id=task_id, step_id="ppt-config", message="PPT策略配置完成")
+
+    # Step 4: PPT生成（含进度同步）
+    tracker.step_start(task_id=task_id, step_id="ppt-generation", message="开始PPT生成")
     # 将 summary.md + ppt_type.json 复制到 ppt-master/input/
     # 加载 ppt-master-main/AGENT.md 执行生成流程（传入 ppt_type 控制风格）
-    
-    # Step 5: 知识库构建（项目级）
+    tracker.complete_step(task_id=task_id, step_id="ppt-generation", message="PPT生成完成")
+
+    # Step 5: 知识库构建（含进度同步）
+    tracker.step_start(task_id=task_id, step_id="knowledge-build", message="开始知识库构建")
     kb_dir = ws / "knowledge-base"
-    kb_script = Path("ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py")
+    kb_script = root / "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py"
     summary_dir = ws / "doc-content-analysis" / "summary"
     manifest = summary_dir / "manifest.json"
     if manifest.exists():
@@ -421,6 +623,10 @@ def execute_competition(project_name: str, zip_file: str = None, ppt_type: str =
                 str(kb_dir), str(summary_dir), str(manifest),
                 "--agent", "doc-content-analysis"
             ], check=True)
+    tracker.complete_step(task_id=task_id, step_id="knowledge-build", message="知识库构建完成")
+
+    # 任务完成
+    tracker.complete_task(task_id=task_id, message="竞赛资源处理完成")
 ```
 
 ### 6. PPT 续写
@@ -439,25 +645,53 @@ def execute_competition(project_name: str, zip_file: str = None, ppt_type: str =
 
 **调度代码示例**：
 ```python
+import shutil, sys
+from pathlib import Path
+
 def execute_ppt_continuation(project_name: str, pptx_file: str, docx_files: list):
     """执行 ppt-continuation-tool Agent"""
-    workspace = Path(f"WORKSPACE/{project_name}/ppt-continuation-tool")
+    root = Path("d:/Projects/vibecoding/DocMind-Studio")
+    workspace = root / "WORKSPACE" / project_name / "ppt-continuation-tool"
     workspace.mkdir(parents=True, exist_ok=True)
-    
+
+    # 初始化进度追踪（强制）
+    sys.path.insert(0, str(root / 'ComponentAgents' / 'process-skill' / 'scripts'))
+    from progress_tracker import ProgressTracker
+    tracker = ProgressTracker(root=str(root / "WORKSPACE"))
+    task_id = tracker.create_task(
+        project=project_name, workflow="PptContinuation", agent="ppt-continuation-tool",
+        steps=[
+            {"id": "workspace-init", "name": "创建工作区"},
+            {"id": "content-analysis", "name": "分析已完成内容"},
+            {"id": "continuation", "name": "续写PPT"},
+        ]
+    )
+    tracker.complete_step(task_id=task_id, step_id="workspace-init", message="工作区创建完成")
+
     # 创建输入目录
     input_dir = workspace / "input"
     input_dir.mkdir(exist_ok=True)
-    
+
     # 复制输入文件
     shutil.copy(pptx_file, input_dir)
     for file in docx_files:
         shutil.copy(file, input_dir)
-    
+
+    # Step 1: 分析已完成内容（含进度同步）
+    tracker.step_start(task_id=task_id, step_id="content-analysis", message="开始分析已完成内容")
     # 读取 AGENT.md 作为执行配置
-    agent_md = Path("ComponentAgents/ppt-continuation-tool/AGENT.md")
+    agent_md = root / "ComponentAgents/ppt-continuation-tool/AGENT.md"
     # 按照 AGENT.md 中的流程执行
-    # ...
-    
+    tracker.complete_step(task_id=task_id, step_id="content-analysis", message="已完成内容分析完成")
+
+    # Step 2: 续写PPT（含进度同步）
+    tracker.step_start(task_id=task_id, step_id="continuation", message="开始续写PPT")
+    # ... 续写逻辑
+    tracker.complete_step(task_id=task_id, step_id="continuation", message="PPT续写完成")
+
+    # 任务完成
+    tracker.complete_task(task_id=task_id, message="PPT续写完成")
+
     # 续写完成后，可选择启动预览服务器
     # 预览URL: http://localhost:5050
 ```

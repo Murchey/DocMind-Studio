@@ -67,7 +67,7 @@ steps:
       python ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py input.docx
 
   - id: "step-2"
-    name: "论文评审"
+    name: "论文研究分析"
     agent: "phd-research-agent"
     input: "Step-1 的 summary/*.md"
     output: "WORKSPACE/{ProjectName}/phd-research-agent/summary/"
@@ -84,7 +84,10 @@ steps:
         skill: "intro-drafter"
         command: |
           python ComponentAgents/phd-research-agent/SKILLS/intro-drafter/scripts/drafter.py research_info.md
-    description: "idea评测、论文审阅、Introduction起草"
+      - condition: "需要生成开题报告/文献综述"
+        skill: "pre-submission-reviewer + AI综合分析"
+        description: "加载 ComponentAgents/phd-research-agent/AGENT.md，对材料进行综合分析生成开题报告"
+    description: "idea评测、论文审阅、Introduction起草、开题报告/文献综述生成"
 
   - id: "step-3"
     name: "格式标准化"
@@ -201,20 +204,44 @@ outputs:
 # 调度代码示例
 # ============================================================
 scheduler_example: |
+  import shutil, subprocess, json, sys
+  from pathlib import Path
+
   def execute_academic_docs(project_name, user_requirement, materials):
-      ws = Path(f"WORKSPACE/{project_name}")
-      
+      root = Path("d:/Projects/vibecoding/DocMind-Studio")
+      ws = root / "WORKSPACE" / project_name
+
+      # ⚠️ 进度追踪初始化（强制 —— 插件Dashboard数据来源）
+      sys.path.insert(0, str(root / 'ComponentAgents' / 'process-skill' / 'scripts'))
+      from progress_tracker import ProgressTracker
+      tracker = ProgressTracker(root=str(root / "WORKSPACE"))
+      task_id = tracker.create_task(
+          project=project_name, workflow="AcademicDocsWorkflow", agent="doc-content-analysis",
+          steps=[
+              {"id": "workspace-init", "name": "创建工作区"},
+              {"id": "material-extraction", "name": "材料内容提取"},
+              {"id": "research-analysis", "name": "论文研究分析（phd-research-agent）"},
+              {"id": "format-output", "name": "格式标准化输出"},
+          ]
+      )
+      tracker.complete_step(task_id=task_id, step_id="workspace-init", message="工作区创建完成")
+
       # Step 1: 材料提取
+      tracker.step_start(task_id=task_id, step_id="material-extraction", message="开始材料内容提取")
       for mat in materials:
-          subprocess.run(["python", "ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py", str(mat)])
-      
-      # Step 2: 论文评审
-      if "评审" in user_requirement:
-          subprocess.run(["python", "ComponentAgents/phd-research-agent/SKILLS/pre-submission-reviewer/scripts/reviewer.py", str(ws/"doc-content-analysis/summary/draft.md")])
-      
+          subprocess.run(["python", str(root / "ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py"), str(mat)])
+      tracker.complete_step(task_id=task_id, step_id="material-extraction", message="材料内容提取完成")
+
+      # Step 2: phd-research-agent 论文研究分析
+      tracker.step_start(task_id=task_id, step_id="research-analysis", message="开始论文研究分析")
+      # 传递 summary.md 到 phd-research-agent/input/
+      # 根据 user_requirement 选择 SKILL: idea-evaluator / pre-submission-reviewer / intro-drafter
+      tracker.complete_step(task_id=task_id, step_id="research-analysis", message="论文研究分析完成")
+
       # Step 3: 格式标准化
-      subprocess.run(["python", "ComponentAgents/doc-form-master-main/SKILLS/markdown-converter/scripts/md_converter.py", str(ws/"phd-research-agent/summary/review_result.md")])
-      
-      # Step 4: 知识库（可选）
-      if len(materials) > 5:
-          subprocess.run(["python", "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py", "update", "knowledge-base/", ...])
+      tracker.step_start(task_id=task_id, step_id="format-output", message="开始格式标准化")
+      subprocess.run(["python", str(root / "ComponentAgents/doc-form-master-main/SKILLS/markitdown-converter/scripts/markitdown_converter.py"), str(ws/"phd-research-agent/summary/output.md")])
+      tracker.complete_step(task_id=task_id, step_id="format-output", message="格式标准化完成")
+
+      # 任务完成
+      tracker.complete_task(task_id=task_id, message="学术文档处理完成")
