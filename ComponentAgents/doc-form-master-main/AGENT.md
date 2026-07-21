@@ -30,6 +30,19 @@ tools: [python]
 
 ---
 
+## 工作区路径规范
+
+**所有中间产物和输出必须写入调度器传入的工作区目录（`WORKSPACE/{ProjectName}/doc-form-master/`），禁止在 `ComponentAgents/doc-form-master-main/` 内创建任何文件。**
+
+脚本通过 `workspace_dir` 参数接收工作区根目录：
+- `DocxParser.run(output_dir=...)` — AST 输出目录
+- `FormatNormalizer(ast_path, ..., workspace_dir=...)` — normalized/reports 输出目录
+- `ASTToDocxConverter(..., workspace_dir=...)` — edited_config 读取目录
+
+**不传 `workspace_dir` 时，脚本回退到默认路径 `workspace/`（仅用于独立调试，不得在 AGENTS.md 工作流中使用）。**
+
+---
+
 # Skills 索引（按需加载，禁止预读）
 
 ```

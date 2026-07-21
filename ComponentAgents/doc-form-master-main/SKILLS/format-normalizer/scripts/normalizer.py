@@ -3,11 +3,12 @@ from pathlib import Path
 
 
 class FormatNormalizer:
-    def __init__(self, ast_path, config_path=None, smart_mode=False):
+    def __init__(self, ast_path, config_path=None, smart_mode=False, workspace_dir=None):
 
         self.ast_path = Path(ast_path)
         self.config_path = config_path
         self.smart_mode = smart_mode
+        self.workspace_dir = Path(workspace_dir) if workspace_dir else Path("workspace")
 
         self.ast = self.load_ast()
         self.template_config = self.load_template_config()
@@ -254,10 +255,7 @@ class FormatNormalizer:
         return False
 
     def export_normalized_ast(self):
-
-        output_dir = Path(
-            "workspace/normalized"
-        )
+        output_dir = self.workspace_dir / "normalized"
 
         output_dir.mkdir(
             parents=True,
@@ -278,8 +276,7 @@ class FormatNormalizer:
             )
 
     def export_fix_report(self):
-
-        report_dir = Path("workspace/reports")
+        report_dir = self.workspace_dir / "reports"
 
         report_dir.mkdir(
             parents=True,
@@ -319,9 +316,9 @@ class FormatNormalizer:
 
 
 if __name__ == "__main__":
-
-    normalizer = FormatNormalizer(
-        "workspace/parsed/document_ast.json"
-    )
-
+    import sys
+    ast_path = sys.argv[1] if len(sys.argv) > 1 else "workspace/parsed/document_ast.json"
+    config_path = sys.argv[2] if len(sys.argv) > 2 else None
+    workspace_dir = sys.argv[3] if len(sys.argv) > 3 else None
+    normalizer = FormatNormalizer(ast_path, config_path=config_path, workspace_dir=workspace_dir)
     normalizer.run()

@@ -18,10 +18,11 @@ except ImportError:
 
 
 class ASTToDocxConverter:
-    def __init__(self, ast_path, template_config_path=None, source_docx_path=None):
+    def __init__(self, ast_path, template_config_path=None, source_docx_path=None, workspace_dir=None):
         self.ast_path = Path(ast_path)
         self.template_config_path = template_config_path
         self.source_docx_path = Path(source_docx_path) if source_docx_path else None
+        self.workspace_dir = Path(workspace_dir) if workspace_dir else Path("workspace")
         self.ast = self.load_ast()
         self.template_config = self.load_template_config()
         self.doc = None
@@ -1092,7 +1093,7 @@ class ASTToDocxConverter:
             sect_pr.append(pg_num_type)
 
     def _load_edited_config(self):
-        edited_config_path = Path("workspace/validated/edited_config.json")
+        edited_config_path = self.workspace_dir / "validated" / "edited_config.json"
         if edited_config_path.exists():
             with open(edited_config_path, "r", encoding="utf-8") as f:
                 return json.load(f)
@@ -1380,9 +1381,11 @@ class ASTToDocxConverter:
 
 
 if __name__ == "__main__":
-    converter = ASTToDocxConverter(
-        "workspace/normalized/normalized_ast.json",
-        "workspace/validated/template_config.json",
-        "workspace/input/source.docx"
-    )
-    converter.run("workspace/output/final.docx")
+    import sys
+    ast_path = sys.argv[1] if len(sys.argv) > 1 else "workspace/normalized/normalized_ast.json"
+    config_path = sys.argv[2] if len(sys.argv) > 2 else "workspace/validated/template_config.json"
+    source_path = sys.argv[3] if len(sys.argv) > 3 else "workspace/input/source.docx"
+    output_path = sys.argv[4] if len(sys.argv) > 4 else "workspace/output/final.docx"
+    workspace_dir = sys.argv[5] if len(sys.argv) > 5 else None
+    converter = ASTToDocxConverter(ast_path, config_path, source_path, workspace_dir=workspace_dir)
+    converter.run(output_path)

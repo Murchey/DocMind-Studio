@@ -272,31 +272,24 @@ class DocxParser:
                 indent=2
             )
 
-    def run(self):
-
+    def run(self, output_dir=None):
         self.validate_docx()
-
         self.parse_metadata()
-
         self.parse_styles()
-
         self.parse_paragraphs()
-
         self.parse_tables()
-
         self.extract_images()
-
         self.parse_formulas()
-
         self._identify_sections()
 
-        self.export_ast(
-            "workspace/parsed/document_ast.json"
-        )
+        if output_dir is None:
+            output_dir = Path("workspace/parsed")
+        else:
+            output_dir = Path(output_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+        self.export_ast(str(output_dir / "document_ast.json"))
 
-        print(
-            "[INFO] AST exported successfully"
-        )
+        print("[INFO] AST exported successfully")
 
     def _identify_sections(self):
         import re
@@ -576,5 +569,6 @@ if __name__ == "__main__":
     import sys
 
     input_path = sys.argv[1] if len(sys.argv) > 1 else "workspace/input/input.docx"
+    output_dir = sys.argv[2] if len(sys.argv) > 2 else None
     parser = DocxParser(input_path)
-    parser.run()
+    parser.run(output_dir=output_dir)
