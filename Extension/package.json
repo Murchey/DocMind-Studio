@@ -2,7 +2,7 @@
   "name": "docmind-studio",
   "displayName": "DocMind Studio",
   "description": "多 Agent 文档智能处理与知识库管理面板",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "docmind",
   "engines": {
     "vscode": "^1.85.0"
