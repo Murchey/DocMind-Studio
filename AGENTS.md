@@ -1,4 +1,4 @@
-﻿﻿# 此文件用于调度所有的 AGENT
+﻿# 此文件用于调度所有的 AGENT
 
 AGENTS 相当于 AGENT 能力的目录和工作方案的生成原则
 AGENT 相当于 SKILL 的能力目录
@@ -24,7 +24,7 @@ DocMind-Studio/                        # 根目录
 │   ├── excel-master-main/
 │   ├── ppt-deep-summary/
 │   ├── phd-research-agent/
-│   ├── ppt-master/
+│   ├── ppt-master-main/
 │   └── ppt-continuation-tool/
 ├── WORKSPACE/                         # 总工作区（根目录下）
 │   └── {ProjectName}/                 # 项目工作区（PascalCase，由 AGENTS.md 创建）
@@ -75,7 +75,7 @@ DocMind-Studio/                        # 根目录
 | excel-master | `ComponentAgents/excel-master-main/AGENT.md` | Excel 表格处理与分析：多表格对比、数据图表生成、排课与日程安排 |
 | ppt-deep-summary | `ComponentAgents/ppt-deep-summary/AGENT.md` | 可处理多 PPTX、PPT 文件的核心观点总结和内容梳理 |
 | phd-research-agent | `ComponentAgents/phd-research-agent/AGENT.md` | 博导论文辅助 Agent，可对论文核心内容进行修改建议 |
-| ppt-master | `ComponentAgents/ppt-master/AGENT.md` | 用于 PPT 生成的 Agent |
+| ppt-master | `ComponentAgents/ppt-master-main/AGENT.md` | 用于 PPT 生成的 Agent |
 | ppt-continuation-tool | `ComponentAgents/ppt-continuation-tool/AGENT.md` | 接收外部半完成 PPTX 和相关 DOCX 资料，分析已完成内容，继续生成剩余页面并输出完整 PPTX |
 
 ---
@@ -87,7 +87,7 @@ DocMind-Studio/                        # 根目录
 | KnowledgeBuilder | `Workflows/KnowledgeBuilderWorkflow.md` | 文档 → 结构化知识库（JSON），支持增量更新 |
 | AcademicDocs | `Workflows/AcdamicDocsWorkflow.md` | 学术文档处理：论文评审、格式更改、知识库构建 |
 | EnterpriseDocs | `Workflows/EnterpriseDocsWorkflow.md` | 企业文档处理：会议纪要、表格对比、报告生成、PPT汇报 |
-| Competition | `Workflows/CompetitionWorkflow.md` | 竞赛资源处理：资源解压、项目书解析、答辩PPT生成、知识库构建 |
+| Competition | `Workflows/CompetitionWorkflow.md` | 竞赛资源处理：3轮用户交互（类型/风格/赛道）→ 核心点提取 → 精简PPT + 知识库 |
 
 ---
 
@@ -267,8 +267,13 @@ def execute_enterprise_docs(project_name: str, materials: list, tables: list):
   Step 0: 创建 WORKSPACE/{ProjectName}/
   Step 1: 解压 ZIP/7Z 资源包（外部处理）
   Step 2: doc-content-analysis（项目书/代码提取）
-  Step 3: ppt-master（答辩PPT生成）
-  Step 4: KnowledgeBuilderWorkflow（知识库构建）
+  Step 3a ⛔: PPT 类型选择（介绍型 / 答辩型）
+  Step 3b ⛔: 视觉风格选择（学术风 / 科技风 / 简约风 / 商务风）
+  Step 3c ⛔: 竞赛赛道选择（挑战杯 / 创青春 / 互联网+ / 通用）
+  Step 3d: 策略矩阵匹配 → ppt_config.json
+  核心点提取（每页 ≤ 5 条 × ≤ 15 字）
+  Step 5: ppt-master（生成精简型 PPT）
+  Step 6: KnowledgeBuilderWorkflow（知识库构建）
   输出：WORKSPACE/{ProjectName}/ppt-master/output/ + knowledge-base/
 ```
 
@@ -281,7 +286,7 @@ from pathlib import Path
 
 SUPPORTED_FORMATS = {".doc", ".docx", ".pdf", ".txt", ".md", ".pptx", ".xlsx"}
 
-def execute_competition(project_name: str, zip_file: str = None):
+def execute_competition(project_name: str, zip_file: str = None, ppt_type: str = None):
     """执行CompetitionWorkflow"""
     ws = Path(f"WORKSPACE/{project_name}")
     ws.mkdir(parents=True, exist_ok=True)
@@ -307,12 +312,25 @@ def execute_competition(project_name: str, zip_file: str = None):
     
     # Step 2: 内容提取（加载 doc-content-analysis/AGENT.md）
     # ... doc-convertor + AI 总结 → summary/ + manifest.json
+
+    # Step 3: PPT 类型选择（用户交互）
+    if ppt_type is None:
+        ppt_type = "defense"  # 默认答辩型
     
-    # Step 3: PPT生成
-    # 将 summary.md 复制到 ppt-master/input/
-    # 加载 ppt-master/AGENT.md 执行生成流程
+    # 写入 ppt_type.json
+    ppt_type_path = ws / "ppt-master" / "input" / "ppt_type.json"
+    ppt_type_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(ppt_type_path, "w", encoding="utf-8") as f:
+        json.dump({
+            "type": ppt_type,
+            "label": "介绍型 PPT" if ppt_type == "introduction" else "答辩型 PPT"
+        }, f, ensure_ascii=False, indent=2)
     
-    # Step 4: 知识库构建
+    # Step 4: PPT生成
+    # 将 summary.md + ppt_type.json 复制到 ppt-master/input/
+    # 加载 ppt-master-main/AGENT.md 执行生成流程（传入 ppt_type 控制风格）
+    
+    # Step 5: 知识库构建
     summary_dir = ws / "doc-content-analysis" / "summary"
     manifest = summary_dir / "manifest.json"
     if manifest.exists():
@@ -567,7 +585,7 @@ def dispatch_workflow(user_requirement: str, project_name: str):
         workflow_config = "Workflows/config/AcademicDocsWorkflow.yaml"
     elif any(kw in user_requirement for kw in ["会议纪要", "企业报告", "表格对比"]):
         workflow_config = "Workflows/config/EnterpriseDocsWorkflow.yaml"
-    elif any(kw in user_requirement for kw in ["竞赛", "项目书", "资源包"]):
+    elif any(kw in user_requirement for kw in ["竞赛", "答辩", "挑战杯", "创青春", "互联网+", "三创赛", "大创", "项目书", "资源包"]):
         workflow_config = "Workflows/config/CompetitionWorkflow.yaml"
     
     if not workflow_config:

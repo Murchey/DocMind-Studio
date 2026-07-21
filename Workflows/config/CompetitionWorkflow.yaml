@@ -1,13 +1,14 @@
 # ============================================================
-# CompetitionWorkflow 配置文件
+# CompetitionWorkflow 配置文件 v2.0
 # ============================================================
-# 功能：处理竞赛资源包，解析代码和项目书，完成竞赛PPT和知识库构建
+# 功能：处理竞赛资源包，提供 3 轮用户交互选择，
+#       从文档中提取核心点生成精简型竞赛 PPT，并构建知识库
 # ============================================================
 
 workflow:
   name: "CompetitionWorkflow"
-  version: "1.0"
-  description: "竞赛资源处理：资源解压、项目书解析、答辩PPT生成、知识库构建"
+  version: "2.0"
+  description: "竞赛资源处理：3 轮用户交互（类型/风格/赛道）→ 核心点提取 → PPT 生成 → 知识库构建"
 
 # ============================================================
 # 触发条件
@@ -17,14 +18,29 @@ triggers:
   - keyword: "答辩"
   - keyword: "项目书"
   - keyword: "资源包"
+  - keyword: "挑战杯"
+  - keyword: "创青春"
+  - keyword: "互联网+"
+  - keyword: "三创赛"
+  - keyword: "大创"
   - keyword: "ZIP"
   - keyword: "7Z"
-  - intent: "用户需要处理竞赛资源包，生成答辩PPT和知识库"
+  - intent: "用户需要处理竞赛资源包，生成竞赛 PPT 和知识库"
+
+# ============================================================
+# 核心原则
+# ============================================================
+core_principles:
+  text_density: "每页幻灯片最多 3-5 条要点，每条不超过 15 个汉字"
+  content_source: "所有文字优先从文档提取的核心点表述，禁止长段落"
+  visual_priority: "图表 > 关键词+短句 > 完整句子 > 禁止使用段落"
+  document_fidelity: "核心数据、技术名词、结论必须与原文一致"
 
 # ============================================================
 # 步骤定义
 # ============================================================
 steps:
+  # --- 预处理阶段 ---
   - id: "step-0"
     name: "工作区初始化"
     type: "scheduler"
@@ -43,18 +59,17 @@ steps:
   - id: "step-1"
     name: "竞赛资源解压与解析"
     type: "preprocessing"
-    input: "用户上传的 ZIP/7Z 资源包"
-    output: "WORKSPACE/{ProjectName}/input/"
+    input: "用户上传的 ZIP/7Z 资源包，或直接放置的散装文档"
+    output: "WORKSPACE/{ProjectName}/doc-content-analysis/input/"
     description: |
-      解压 ZIP/7Z 格式资源包
-      提取项目书、代码、文档到 input/ 目录
+      解压 ZIP/7Z 格式资源包，提取项目书、代码、文档到 doc-content-analysis/input/
     note: |
-      此步骤由调度器或外部脚本完成。
       支持两种模式：
-      1) ZIP/7Z 资源包：解压到 WORKSPACE/{ProjectName}/input/，再将文档复制到 doc-content-analysis/input/
-      2) 直接上传文档：直接将文件放入 doc-content-analysis/input/
-      仅复制 doc-content-analysis 支持的格式：.doc/.docx/.pdf/.txt/.md/.pptx/.xlsx
+      1) ZIP/7Z 资源包：解压到 input/，筛选支持的格式复制到 doc-content-analysis/input/
+      2) 直接上传：用户直接将文件放入 doc-content-analysis/input/
+      支持格式：.doc / .docx / .pdf / .txt / .md / .pptx / .xlsx
 
+  # --- 内容提取阶段 ---
   - id: "step-2"
     name: "内容提取"
     agent: "doc-content-analysis"
@@ -62,44 +77,320 @@ steps:
     output: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/"
     key_outputs:
       - "manifest.json"
-      - "summary.json"
-    description: "提取项目书、代码注释、文档内容"
+      - "documents/*/summary.json"
+      - "综合总结.md"
+    description: "提取项目书、代码注释、文档内容，生成结构化总结"
     note: |
       调度器加载 ComponentAgents/doc-content-analysis/AGENT.md 执行完整流程：
-      1) doc-convertor Skill：格式转换 + 文本/图片提取
-      2) AI 总结：生成 summary.json + summary.md
+      1) doc-convertor Skill：格式转换 + 文本/图片提取 → content.json
+      2) AI 总结：生成 summary.json + summary.md（保留原文核心表述）
       3) 生成 manifest.json（含 content_hash）
       若 input/ 无可处理文档，manifest.json 的 status 为 "empty"，终止工作流。
 
-  - id: "step-3"
-    name: "竞赛PPT构建"
+  # ============================================================
+  # 用户交互层（3 轮，阻塞型）
+  # ============================================================
+
+  - id: "step-3a"
+    name: "交互一：PPT 类型选择"
+    type: "interactive"
+    blocking: true
+    order: 1
+    description: "确定 PPT 的功能定位和叙事策略"
+    prompt: "请选择您需要的 PPT 类型："
+    default: "defense"
+    options:
+      - value: "introduction"
+        label: "介绍型 PPT"
+        description: "场景：项目展示、路演。风格：视觉冲击力强、图文并茂。重点：项目亮点、创新点、应用价值"
+      - value: "defense"
+        label: "答辩型 PPT"
+        description: "场景：竞赛答辩、专家评审。风格：逻辑严谨、论证充分。重点：技术路线、实验数据、结果对比"
+    output: "ppt-master/input/user_choices.json（type 字段）"
+
+  - id: "step-3b"
+    name: "交互二：PPT 视觉风格选择"
+    type: "interactive"
+    blocking: true
+    order: 2
+    description: "确定 PPT 的配色、字重和整体视觉调性"
+    prompt: "请选择您喜欢的 PPT 视觉风格："
+    default: "academic"
+    options:
+      - value: "academic"
+        label: "学术风"
+        description: "深蓝/白色系，衬线标题+无衬线正文，规整留白。适合高校答辩、论文评审"
+      - value: "tech"
+        label: "科技风"
+        description: "深色背景+青蓝/紫色渐变，几何线条装饰，现代感强。适合技术类、IT 类项目"
+      - value: "minimal"
+        label: "简约风"
+        description: "浅色背景+大量留白+单色强调，极简克制。适合注重文字信息传递的场景"
+      - value: "business"
+        label: "商务风"
+        description: "暖色/金色+深灰，稳重专业。适合商业计划书、创业路演"
+    output: "ppt-master/input/user_choices.json（追加 style 字段）"
+
+  - id: "step-3c"
+    name: "交互三：竞赛赛道选择"
+    type: "interactive"
+    blocking: true
+    order: 3
+    description: "确定 PPT 的评审侧重点和章节权重"
+    prompt: "请选择您的竞赛类型（影响评审侧重点）："
+    default: "generic"
+    options:
+      - value: "tiaozhanbei"
+        label: "挑战杯（大挑）"
+        description: "侧重点：社会价值、实践过程、创新意义、发展前景、团队协作。偏学术研究"
+      - value: "chuangqingchun"
+        label: "创青春 / 小挑"
+        description: "侧重点：商业逻辑、市场分析、盈利模式、竞争优势。偏创业商业"
+      - value: "internet_plus"
+        label: "互联网+"
+        description: "侧重点：技术创新、商业模式、带动就业、引领教育。科技+商业并重"
+      - value: "generic"
+        label: "通用（不区分赛道）"
+        description: "平衡覆盖研究、技术、商业、团队各方面，适合未指定竞赛的场景"
+    output: "ppt-master/input/user_choices.json（追加 track 字段）"
+
+  # --- 配置汇总 ---
+  - id: "step-3d"
+    name: "交互汇总：生成 PPT 配置"
+    type: "scheduler"
+    description: "将三轮用户选择合并为完整的 PPT 生成配置"
+    input: "ppt-master/input/user_choices.json"
+    output: "ppt-master/input/ppt_config.json"
+    note: |
+      调度器读取 user_choices.json，查询下方 ppt_strategy_matrix，
+      生成包含以下字段的 ppt_config.json：
+      - type: introduction / defense
+      - style: academic / tech / minimal / business
+      - track: tiaozhanbei / chuangqingchun / internet_plus / generic
+      - page_structure: 根据 type × track 查表
+      - visual_config: 根据 style 查表
+      - review_focus: 根据 track 查表
+
+  # --- PPT 生成 ---
+  - id: "step-5"
+    name: "PPT 生成"
     agent: "ppt-master"
-    input: "WORKSPACE/{ProjectName}/ppt-master/input/（由调度器从 doc-content-analysis/summary/ 复制 summary.md + 综合总结.md）"
-    output: "WORKSPACE/{ProjectName}/ppt-master/output/（由调度器从 projects/<name>/exports/ 收集）"
-    description: "自动化生成答辩演示文稿"
+    input: |
+      WORKSPACE/{ProjectName}/ppt-master/input/
+      ├── ppt_config.json        # Step 3d 生成的综合配置
+      ├── user_choices.json      # 用户三轮选择记录
+      └── summary.md...          # Step 2 提取的文档总结
+    output: "WORKSPACE/{ProjectName}/ppt-master/output/*.pptx"
+    description: "根据用户三轮选择，从文档核心点生成对应类型、风格、赛道的精简型 PPT"
     substeps:
-      - name: "内容结构化"
-        description: "从项目书中提取背景、方法、结果、创新点"
-      - name: "PPT生成"
-        description: "调用 ppt-master 生成结构化PPT"
+      - name: "加载配置"
+        description: "读取 ppt_config.json 确定页面结构、视觉配置、评审侧重"
+      - name: "核心点映射"
+        description: "将 summary.json 中的内容按核心点提取规则映射到每页要点（每页≤5条，每条≤15字）"
+      - name: "PPT 生成"
+        description: "调用 ppt-master 按视觉配置和页面结构生成 PPTX"
+      - name: "文字精简校验"
+        description: "校验每页要点数 ≤ 5 条、每条 ≤ 15 字、无长段落"
     note: |
       调度器负责：
-      1) 将 doc-content-analysis/summary/ 中的 summary.md（含 综合总结.md）复制到 ppt-master/input/
-      2) 读取 ComponentAgents/ppt-master/AGENT.md 执行生成流程
-      3) 将 projects/<name>/exports/ 中的 PPTX 复制到 ppt-master/output/
+      1) 将 summary/*.md + 综合总结.md → ppt-master/input/
+      2) 将 step-3d 生成的 ppt_config.json → ppt-master/input/
+      3) 读取 ComponentAgents/ppt-master/AGENT.md 执行生成流程，传入 ppt_config.json
+      4) 将 projects/<name>/exports/ 中的 PPTX → output/
       前置条件：Step-2 manifest.json 的 status 必须为 "completed"
 
-  - id: "step-4"
+  # --- 知识库 ---
+  - id: "step-6"
     name: "知识库构建"
     agent: "KnowledgeBuilderWorkflow"
-    input: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/manifest.json + 所有竞赛材料"
+    input: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/manifest.json"
     output: "knowledge-base/"
-    description: "保存竞赛资料到可成长式知识库"
+    description: "保存所有竞赛材料到可成长式知识库"
     note: |
-      调度器将 Step-2 的 manifest.json 传递给 kb_manager.py：
-      python kb_manager.py update knowledge-base/ {summary_dir}/ {summary_dir}/manifest.json
-      如 knowledge-base/ 不存在则自动执行 init 模式。
-      前置条件：Step-2 manifest.json 的 status 必须为 "completed"
+      调用 kb_manager.py update knowledge-base/ {summary_dir}/ {manifest.json}
+      如 knowledge-base/ 不存在则自动 init。
+
+# ============================================================
+# PPT 策略矩阵
+# ============================================================
+ppt_strategy_matrix:
+
+  # --- 页面结构（type × track 交叉表：2×4=8 种组合） ---
+  page_structure:
+    introduction:
+      generic:
+        - "封面（项目名称 + 一句 Slogan）"
+        - "目录（章节导航）"
+        - "项目背景与痛点（3 个核心数据 + 1 句痛点）"
+        - "解决方案概述（1 句话 + 架构简图）"
+        - "核心功能展示（3 个亮点，每个 1 页，每页 ≤ 3 条要点）"
+        - "技术创新点（与竞品对比表，≤ 4 行）"
+        - "应用场景与价值（2-3 个场景，每个 1 句话）"
+        - "团队介绍（核心成员 + 一句话分工）"
+        - "致谢 / 联系方式"
+      tiaozhanbei:
+        - "封面"
+        - "目录"
+        - "项目背景与社会价值（数据 + 政策支撑）"
+        - "解决方案概述（1 句话概括）"
+        - "核心创新（3 点，每点附一句话论证）"
+        - "实践过程（时间线图表 + 关键节点）"
+        - "成果展示（量化数据 + 应用照片）"
+        - "团队与协作（学科交叉，一句话分工）"
+        - "发展前景（阶段规划 + 预期指标）"
+        - "致谢"
+      chuangqingchun:
+        - "封面"
+        - "目录"
+        - "市场痛点与机会（3 个关键数据）"
+        - "产品/服务介绍（1 句话 + 模式图）"
+        - "竞品分析与差异化（对比表，≤ 4 行）"
+        - "商业模式与盈利（收入-成本简图）"
+        - "项目成果（落地数据 + 现场照片）"
+        - "团队介绍（角色 + 背景一句话）"
+        - "发展规划（里程碑时间线）"
+        - "致谢"
+      internet_plus:
+        - "封面"
+        - "目录"
+        - "行业背景与痛点（3 个数据点）"
+        - "产品/技术方案（1 句话 + 架构图）"
+        - "技术创新（3 点 + 一句话说明）"
+        - "商业模式（模式图 + 一句话亮点）"
+        - "带动就业与社会价值（量化数据）"
+        - "项目成果与荣誉（时间线 + 数据）"
+        - "团队介绍（一句话分工）"
+        - "发展规划"
+        - "致谢"
+
+    defense:
+      generic:
+        - "封面（项目名称 + 队伍信息 + 指导教师）"
+        - "目录（完整章节索引）"
+        - "选题背景与研究意义（2-3 个数据 + 文献引用）"
+        - "技术路线与方法（流程图 + 关键步骤一句话）"
+        - "实验设计与数据采集（表格 + 1 句说明合理性）"
+        - "实验结果与分析（数据图表 + 结论一句话）"
+        - "与现有方案对比（量化对比表，≤ 5 行）"
+        - "创新点总结（3-5 点，每点一句话论证）"
+        - "不足与改进（2-3 条，诚实面对）"
+        - "研究展望（3 个方向一句话）"
+        - "致谢 / Q&A"
+      tiaozhanbei:
+        - "封面"
+        - "目录"
+        - "研究背景与社会价值（文献+数据支撑）"
+        - "技术路线与研究方法（流程图）"
+        - "实验/调研设计（表格+一句话科学依据）"
+        - "结果与分析（数据+结论一句话）"
+        - "社会贡献与实践价值（量化对比）"
+        - "创新点总结（3-5 点）"
+        - "不足与改进"
+        - "展望"
+        - "致谢 / Q&A"
+      chuangqingchun:
+        - "封面"
+        - "目录"
+        - "市场分析（3 个核心数据）"
+        - "产品/服务方案（一句话 + 架构）"
+        - "竞品对比（量化表 ≤ 5 行）"
+        - "商业模式论证（收入-成本逻辑）"
+        - "项目成果（落地数据）"
+        - "创新与优势（3 点）"
+        - "风险与应对"
+        - "发展规划"
+        - "致谢 / Q&A"
+      internet_plus:
+        - "封面"
+        - "目录"
+        - "行业背景（数据 + 政策）"
+        - "技术方案（架构图 + 创新点一句话）"
+        - "商业模式（模式图）"
+        - "实验/运营数据（图表 + 结论）"
+        - "竞品对比（量化表）"
+        - "社会价值与就业带动"
+        - "创新点总结（3-5 点）"
+        - "发展规划"
+        - "致谢 / Q&A"
+
+  # --- 视觉配置（4 种风格） ---
+  visual_config:
+    academic:
+      bg_color: "白色 / 浅灰蓝 #F0F4F8"
+      accent_color: "深蓝 #1E3A5F"
+      title_font: "思源宋体（衬线，稳重）"
+      body_font: "微软雅黑 / 思源黑体（无衬线）"
+      decoration: "细线分隔，无大色块，大量留白"
+      chart_style: "规范学术图表，灰色边框，标注清晰"
+    tech:
+      bg_color: "深黑蓝 #0A0F24 / #121838"
+      accent_color: "科技蓝 #3B82F6 + 紫 #8B5CF6"
+      title_font: "微软雅黑 Bold"
+      body_font: "微软雅黑 Light"
+      decoration: "几何线条、渐变色块、发光效果"
+      chart_style: "深色底+亮色数据系列，现代风格"
+    minimal:
+      bg_color: "纯白 #FFFFFF / #FAFAFA"
+      accent_color: "黑灰单色 #2D2D2D"
+      title_font: "思源黑体 Medium"
+      body_font: "思源黑体 Light"
+      decoration: "极窄线条，无装饰，大面积留白"
+      chart_style: "极简图表，单色系列，去网格线"
+    business:
+      bg_color: "深灰蓝 #1C2833 / 暖白 #F5F0E8"
+      accent_color: "金色 #D4A84B + 深灰 #2C3E50"
+      title_font: "微软雅黑 Bold / Georgia"
+      body_font: "微软雅黑"
+      decoration: "金色细线、渐变光晕、质感背景"
+      chart_style: "商务图表，暖色系列，立体效果"
+
+  # --- 评审侧重（4 种赛道） ---
+  review_focus:
+    tiaozhanbei:
+      primary: ["社会价值", "实践过程", "创新意义"]
+      secondary: ["发展前景", "团队协作"]
+      tip: "挑战杯更看重项目实践性和社会贡献度，PPT 应突出实地调研、试点运营、社会影响"
+    chuangqingchun:
+      primary: ["商业逻辑", "市场分析", "竞争优势"]
+      secondary: ["盈利模式", "团队能力"]
+      tip: "创青春更看重商业可行性，PPT 应突出市场规模、竞品差异、收入模型"
+    internet_plus:
+      primary: ["技术创新", "商业模式", "带动就业"]
+      secondary: ["引领教育", "社会价值"]
+      tip: "互联网+ 技术+商业并重，PPT 应同时展示技术深度和商业可行性"
+    generic:
+      primary: ["创新性", "可行性", "完整性"]
+      secondary: ["团队", "前景"]
+      tip: "通用场景下平衡展示研究、技术、商业、团队各方面"
+
+# ============================================================
+# 核心点提取规则
+# ============================================================
+core_point_extraction:
+  description: "从 summary.json 中提取 PPT 核心点。每页 ≤ 5 条，每条 ≤ 15 字，优先用文档关键词。"
+  rules:
+    - name: "背景提取"
+      source: "summary.json → 项目背景 / 项目概述"
+      output: "≤ 3 个数据点 + ≤ 1 句痛点描述"
+      example: "我国XXX领域市场缺口达 YYY 亿 → '市场缺口 YYY 亿'"
+    - name: "技术/方案提取"
+      source: "summary.json → 核心功能 / 技术路线"
+      output: "≤ 3 个关键词，每个 ≤ 1 句说明"
+      example: "Mixin非破坏性注入 → 'Mixin注入 · 零侵入修改'"
+    - name: "创新点提取"
+      source: "summary.json → 技术创新点 / 项目优势"
+      output: "3-5 条，每条 ≤ 12 字"
+      example: "全新Hydratoxin水中毒机制 → '概率触发水中毒'"
+    - name: "数据提取"
+      source: "summary.json → 实验结果 / 项目成果"
+      output: "保留原始数值，格式化为短标签"
+      example: "纯净度0级触发概率30% → '脏水 → 30%中毒'"
+    - name: "团队提取"
+      source: "summary.json / mods.toml / README"
+      output: "成员数量 + 角色关键词 + 每人 ≤ 8 字描述"
+    - name: "对比提取"
+      source: "summary.json → 竞品对比 / 与现有方案对比"
+      output: "≤ 5 行的对比表格，每格 ≤ 10 字"
 
 # ============================================================
 # 数据流
@@ -111,7 +402,15 @@ dataflow: |
       ↓
   [doc-content-analysis] → 内容提取
       ↓
-  [ppt-master] → 答辩PPT
+  ┌─ Step 3a ⛔  PPT 类型选择 ──→ 介绍型 / 答辩型
+  ├─ Step 3b ⛔  视觉风格选择 ──→ 学术风 / 科技风 / 简约风 / 商务风
+  └─ Step 3c ⛔  竞赛赛道选择 ──→ 挑战杯 / 创青春 / 互联网+ / 通用
+      ↓
+  [Step 3d] 策略矩阵匹配 → ppt_config.json
+      ↓
+  [核心点提取] summary.json → 精简要点（每页 ≤ 5 条，每条 ≤ 15 字）
+      ↓
+  [ppt-master] → 对应类型+风格+赛道的精简 PPT
       ↓
   [KnowledgeBuilderWorkflow] → 知识库
       ↓
@@ -122,14 +421,20 @@ dataflow: |
 # ============================================================
 status_checks:
   - condition: "Step-2 manifest.json 中 status == 'completed'"
-    action: "继续 Step-3（PPT生成）和 Step-4（知识库构建）"
+    action: "进入用户交互阶段（Step 3a → 3b → 3c）"
   - condition: "Step-2 manifest.json 中 status == 'empty'"
-    action: "终止工作流，提示用户：无可处理的文档格式，请放入 .doc/.docx/.pdf/.txt/.md 文件"
+    action: "终止工作流，提示：无可处理的文档格式"
   - condition: "Step-2 manifest.json 中 status == 'failed'"
-    action: "终止工作流，读取 documents[].error 获取失败原因，提示用户修正后重试"
-  - condition: "Step-3 PPT生成完成"
-    action: "收集 PPTX 到 ppt-master/output/，通知用户"
-  - condition: "Step-4 知识库构建完成"
+    action: "终止工作流，读取 error 详情并提示修正"
+  - condition: "Step-3a 用户未选择（超时）"
+    action: "默认 defense（答辩型），继续 3b"
+  - condition: "Step-3b 用户未选择（超时）"
+    action: "默认 academic（学术风），继续 3c"
+  - condition: "Step-3c 用户未选择（超时）"
+    action: "默认 generic（通用），进入 Step 3d"
+  - condition: "Step-5 PPT 生成完成"
+    action: "收集 PPTX → output/，通知用户"
+  - condition: "Step-6 知识库构建完成"
     action: "输出最终产物清单"
 
 # ============================================================
@@ -138,39 +443,37 @@ status_checks:
 error_handling:
   - scenario: "manifest 状态不是 completed"
     action: "fail"
-    message: "文档内容提取未成功完成，请检查输入文档格式或内容"
+    message: "文档内容提取未成功完成"
   - scenario: "knowledge-base/ 不存在"
     action: "fallback"
-    message: "自动切换为 init 模式，首次构建知识库"
+    message: "首次构建知识库，自动 init"
   - scenario: "ppt-master 目录不存在"
     action: "skip"
-    message: "跳过 PPT 生成（可选步骤），继续知识库构建"
+    message: "跳过 PPT 生成，继续知识库构建"
   - scenario: "input/ 目录为空"
     action: "fail"
-    message: "未找到可处理的文档，请放入支持的文档格式"
+    message: "未找到可处理的文档"
+  - scenario: "user_choices.json 字段缺失"
+    action: "fallback"
+    message: "默认值填充（defense + academic + generic）"
+  - scenario: "核心点提取后某页为空"
+    action: "skip"
+    message: "跳过该页，不生成空白幻灯片"
 
 # ============================================================
-# 独立Agent调用点汇总
+# 独立 Agent 调用点汇总
 # ============================================================
 standalone_agents:
   - agent: "doc-content-analysis"
     purpose: "解析项目书/代码内容"
     entry_point: "ComponentAgents/doc-content-analysis/AGENT.md"
-    command: |
-      python ComponentAgents/doc-content-analysis/SKILLS/doc-convertor/scripts/doc_converter.py <input_file>
   - agent: "ppt-master"
-    purpose: "生成竞赛答辩PPT"
+    purpose: "根据 ppt_config.json 生成对应风格的竞赛 PPT"
     entry_point: "ComponentAgents/ppt-master/AGENT.md"
-    command: |
-      # 调度器读取 AGENT.md 按流程执行，非直接执行 SKILL.md
-      # 具体调用方式见 AGENT.md 中的执行流程
   - agent: "KnowledgeBuilderWorkflow"
-    purpose: "构建竞赛知识库"
+    purpose: "增量构建竞赛知识库"
     command: |
-      python ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py update \
-        knowledge-base/ \
-        WORKSPACE/{ProjectName}/doc-content-analysis/summary/ \
-        WORKSPACE/{ProjectName}/doc-content-analysis/summary/manifest.json
+      python kb_manager.py update knowledge-base/ {summary_dir}/ {manifest.json}
 
 # ============================================================
 # 输出位置
@@ -178,70 +481,11 @@ standalone_agents:
 outputs:
   - path: "WORKSPACE/{ProjectName}/doc-content-analysis/summary/"
     description: "项目书/代码提取结果"
+  - path: "WORKSPACE/{ProjectName}/ppt-master/input/user_choices.json"
+    description: "用户三轮选择记录（type + style + track）"
+  - path: "WORKSPACE/{ProjectName}/ppt-master/input/ppt_config.json"
+    description: "合并后的 PPT 生成配置"
   - path: "WORKSPACE/{ProjectName}/ppt-master/output/"
-    description: "答辩PPT（PPTX）"
+    description: "竞赛 PPT（PPTX）"
   - path: "knowledge-base/"
     description: "竞赛知识库"
-
-# ============================================================
-# 调度代码示例
-# ============================================================
-scheduler_example: |
-  import shutil
-  import json
-  from pathlib import Path
-  
-  # 定义支持的文档格式
-  SUPPORTED_FORMATS = {".doc", ".docx", ".pdf", ".txt", ".md", ".pptx", ".xlsx"}
-
-  def execute_competition(project_name, zip_file=None):
-      ws = Path(f"WORKSPACE/{project_name}")
-      ws.mkdir(parents=True, exist_ok=True)
-
-      # Step 0: 初始化 Agent 子目录
-      for agent in ["doc-content-analysis", "ppt-master"]:
-          (ws / agent / "input").mkdir(parents=True, exist_ok=True)
-          (ws / agent / "output").mkdir(parents=True, exist_ok=True)
-
-      # Step 1: 解压资源包或直接使用文档
-      if zip_file and Path(zip_file).exists():
-          input_dir = ws / "input"
-          input_dir.mkdir(exist_ok=True)
-          shutil.unpack_archive(zip_file, input_dir)
-          # 将支持的文档复制到 doc-content-analysis/input/
-          for f in input_dir.rglob("*"):
-              if f.is_file() and f.suffix.lower() in SUPPORTED_FORMATS:
-                  shutil.copy2(f, ws / "doc-content-analysis" / "input" / f.name)
-
-      # 检查是否有可处理文档
-      docs = list((ws / "doc-content-analysis" / "input").iterdir())
-      if not docs:
-          print("错误：未找到可处理的文档格式")
-          return
-
-      # Step 2: 内容提取（加载 AGENT.md 执行完整流程）
-      # 1) doc-convertor 转换 + 提取
-      # 2) AI 总结 → summary.json + summary.md
-      # 3) 生成 manifest.json
-      # --- 具体执行方式由调度器根据 AGENT.md 决定 ---
-
-      # Step 3: PPT 生成
-      # 调度器将 summary.md 复制到 ppt-master/input/
-      # 读取 ComponentAgents/ppt-master/AGENT.md 执行生成流程
-      # 将 projects/<name>/exports/ 的 PPTX 复制到 ppt-master/output/
-
-      # Step 4: 知识库构建
-      summary_dir = ws / "doc-content-analysis" / "summary"
-      manifest = summary_dir / "manifest.json"
-      if manifest.exists():
-          with open(manifest, "r", encoding="utf-8") as f:
-              data = json.load(f)
-          if data.get("status") == "completed":
-              subprocess.run([
-                  "python",
-                  "ComponentAgents/doc-content-analysis/SKILLS/knowledge-builder/scripts/kb_manager.py",
-                  "update",
-                  "knowledge-base/",
-                  str(summary_dir),
-                  str(manifest)
-              ], check=True)
