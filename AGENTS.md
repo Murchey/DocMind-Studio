@@ -840,9 +840,13 @@ def execute_ppt_master(project_name: str, input_files: list):
     for file in input_files:
         shutil.copy(file, input_dir)
     
+    # 设置工作区环境变量（ppt-master 通过此变量定位项目路径）
+    import os
+    os.environ["DOCMIND_WORKSPACE"] = str(Path(f"WORKSPACE/{project_name}"))
+    
     # 读取 SKILL.MD 作为执行配置
     skill_md = Path("ComponentAgents/ppt-master-main/SKILLS/ppt-master/SKILL.MD")
-    # 按照 SKILL.MD 中的流程执行
+    # 按照 SKILL.MD 中的流程执行，project_manager.py init 会自动使用 WORKSPACE 路径
     # ...
 ```
 
