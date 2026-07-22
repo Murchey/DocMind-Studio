@@ -49,6 +49,7 @@ tools: [python]
 doc-compatibility → markitdown-converter → docx-parser → xml-safety → formula-protection → template-engine → font-manager
 → format-normalizer（已格式化）/ zero-format-normalizer（零格式）
 → table-processor → footnote-processor → margin-manager → preview-design（含文档标注）→ image-layout → translation-engine → pdf-export
+→ format-ai-checker（⚠️ 必要步骤：AI 格式合规检查 + 自动修复，格式化后强制执行）
 → custom-format-manager（自定义格式配置管理，独立调用）
 ```
 
@@ -381,6 +382,39 @@ from margin_manager import MarginManager
 manager = MarginManager()
 result = manager.apply_margins('workspace/output/formatted.docx', standard='academic')
 ```
+
+## Step 9d: AI 格式合规检查（自动修复）
+
+**⚠️ 必要步骤** — 格式化完成后必须执行，不可跳过。
+
+通过读取 DOCX XML 内部结构，自动检查格式是否符合论文标准，并自动修复不符合项。无外部依赖，精确到每个 XML 属性。
+
+```python
+import sys
+sys.path.insert(0, 'SKILLS/format-ai-checker/scripts')
+from xml_inspector import XmlInspector
+
+inspector = XmlInspector(
+    docx_path='workspace/output/formatted.docx',
+    workspace_dir='workspace'
+)
+# auto_fix=True：自动修复不符合项，最多尝试 3 轮修复
+report = inspector.run(auto_fix=True, max_fix_rounds=3)
+```
+
+**检查内容**：页面尺寸/边距、字体字号、段落对齐/行距/缩进、标题格式、三线表、文档结构
+
+**自动修复**：
+- `auto_fix=True` 时，检查发现不符合项后自动修改 DOCX 内部 XML
+- 修复后重新检查，最多循环 `max_fix_rounds` 轮
+- 每轮修复后生成对比报告，记录修复前后的变化
+
+**报告输出**：`workspace/reports/xml_inspection_report.json` + `.md`
+
+**处理逻辑**：
+- `overall_grade` 为 A/A- → 通过，进入 Step 10
+- `overall_grade` 为 B → 通过（自动修复已完成），记录警告，进入 Step 10
+- `overall_grade` 为 C/D → 展示修复报告，**提示用户确认**是否继续或手动介入
 
 ## Step 10-12: 后续处理
 - image-layout：优化图片（可选）

@@ -1,0 +1,166 @@
+name: chinese_academic
+description: 中文学术论文格式规则（GB/T 7713.1-2006）
+version: "1.0"
+
+# =========================
+# 页面规则
+# =========================
+page:
+  size:
+    value: A4
+    width_mm: 210
+    height_mm: 297
+    severity: critical
+
+  margins:
+    top_cm: 2.54
+    bottom_cm: 2.54
+    left_cm: 3.17
+    right_cm: 2.54
+    severity: critical
+
+# =========================
+# 字体规则
+# =========================
+fonts:
+  body:
+    chinese_family: 宋体
+    english_family: Times New Roman
+    size_pt: 12
+    bold: false
+    color: "000000"
+    severity: critical
+    applies_to: [body_text, first_paragraph]
+
+  heading1:
+    family: 黑体
+    size_pt: 14
+    bold: true
+    color: "000000"
+    alignment: center
+    severity: critical
+    applies_to: [heading1]
+
+  heading2:
+    family: 黑体
+    size_pt: 12
+    bold: true
+    color: "000000"
+    alignment: left
+    severity: warning
+    applies_to: [heading2]
+
+  heading3:
+    family: 黑体
+    size_pt: 12
+    bold: true
+    color: "000000"
+    alignment: left
+    severity: warning
+    applies_to: [heading3]
+
+# =========================
+# 段落规则
+# =========================
+paragraph:
+  alignment: both
+  severity: critical
+  applies_to: [body_text, first_paragraph]
+
+  line_spacing:
+    type: multiple
+    value: 1.5
+    severity: critical
+    applies_to: [body_text, first_paragraph]
+
+  first_line_indent:
+    value_chars: 2
+    unit: character
+    severity: critical
+    applies_to: [body_text, first_paragraph]
+
+  spacing_before:
+    value_pt: 0
+    severity: warning
+    applies_to: [body_text, first_paragraph]
+
+  spacing_after:
+    value_pt: 0
+    severity: warning
+    applies_to: [body_text, first_paragraph]
+
+# =========================
+# 标题规则
+# =========================
+heading:
+  level1:
+    alignment: center
+    spacing_before_pt: 24
+    spacing_after_pt: 18
+    first_line_indent: none
+    severity: critical
+
+  level2:
+    alignment: left
+    spacing_before_pt: 18
+    spacing_after_pt: 12
+    first_line_indent: none
+    severity: warning
+
+  level3:
+    alignment: left
+    spacing_before_pt: 6
+    spacing_after_pt: 6
+    first_line_indent: none
+    severity: warning
+
+# =========================
+# 表格规则
+# =========================
+table:
+  header_font: 黑体
+  header_size_pt: 10.5
+  header_bold: true
+  body_font: 宋体
+  body_size_pt: 10.5
+  border_style: three_line
+  severity: warning
+
+# =========================
+# 文档结构规则
+# =========================
+structure:
+  has_title_page:
+    required: true
+    severity: critical
+
+  has_toc:
+    required: true
+    severity: warning
+
+  has_references:
+    required: true
+    severity: warning
+    patterns: ["参考文献", "References", "REFERENCES"]
+
+  heading_numbering:
+    required: true
+    severity: warning
+    patterns:
+      h1: "^第[一二三四五六七八九十]+章"
+      h2: "^[0-9]+\\s"
+      h3: "^[0-9]+\\.[0-9]+"
+
+  consecutive_empty_paragraphs:
+    max_allowed: 2
+    severity: warning
+
+# =========================
+# 列表规则
+# =========================
+list:
+  bullet_font: 宋体
+  bullet_size_pt: 12
+  number_font: 宋体
+  number_size_pt: 12
+  severity: warning
