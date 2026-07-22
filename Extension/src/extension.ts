@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
 import * as path from 'path';
+import * as fs from 'fs';
 import * as crypto from 'crypto';
+import { ProgressService } from './services/progressService';
 import { AgentsProvider } from './providers/agentsProvider';
 import { WorkflowsProvider } from './providers/workflowsProvider';
 import { KnowledgeBaseProvider } from './providers/knowledgeBaseProvider';
@@ -17,6 +18,36 @@ export function activate(context: vscode.ExtensionContext) {
   const workflowsProvider = new WorkflowsProvider(rootPath);
   const knowledgeBaseProvider = new KnowledgeBaseProvider(rootPath);
 
+  // ── ProgressService：通过 stdout 实时监听 Python 进度 ──
+  const progressService = new ProgressService();
+  context.subscriptions.push(progressService);
+
+  // 将 ProgressService 事件转发到 Dashboard postMessage（增量更新，不重绘 HTML）
+  context.subscriptions.push(
+    progressService.onProgress((_event, task) => {
+      if (task && DashboardPanel.currentPanel) {
+        DashboardPanel.currentPanel.sendProgressUpdate({
+          exists: true,
+          status: task.status,
+          percent: task.percent,
+          project: task.project,
+          workflow: task.workflow,
+          agent: task.agent,
+          currentStep: task.currentStep,
+          message: task.message,
+          steps: Array.from(task.steps.values()).map(s => ({
+            id: s.step_id,
+            name: s.step_id,
+            status: s.status,
+            percent: s.percent,
+            message: s.message,
+          })),
+          outputs: [],
+        });
+      }
+    })
+  );
+
   context.subscriptions.push(
     vscode.window.registerTreeDataProvider('docmind.agents', agentsProvider),
     vscode.window.registerTreeDataProvider('docmind.workflows', workflowsProvider),
@@ -30,6 +61,16 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.commands.registerCommand('docmind.openDashboard', () => {
       DashboardPanel.createOrShow(context.extensionUri, rootPath);
+    })
+  );
+
+  // 启动 Python 任务并实时监听进度（替代旧的文件监听方案）
+  context.subscriptions.push(
+    vscode.commands.registerCommand('docmind.startTask', (args: { taskId: string; script: string; args?: string[]; cwd?: string }) => {
+      const workingDir = args.cwd || rootPath || process.cwd();
+      progressService.startProcess(args.taskId, args.script, args.args || [], workingDir);
+      DashboardPanel.createOrShow(context.extensionUri, rootPath);
+      vscode.window.showInformationMessage(`DocMind task started: ${args.taskId}`);
     })
   );
 
@@ -408,6 +449,8 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
 
+  // [LEGACY] 基于文件监听的进度同步 — 保留作为 fallback（兼容非 Extension 启动的任务）。
+  // 主路径已切换到 ProgressService（stdout 实时推送，见上方 docmind.startTask 命令）。
   if (rootPath) {
     const progressFile = vscode.workspace.getConfiguration('docmind').get<string>('progressFile') || 'WORKSPACE/.docmind-progress.json';
     const configuredWatcher = vscode.workspace.createFileSystemWatcher(new vscode.RelativePattern(rootPath, progressFile));
@@ -492,6 +535,11 @@ function scanAllWorkflowStates(rootPath: string): Map<string, object> {
 
 /**
  * 启动进度轮询定时器
+ */
+/**
+ * [LEGACY] 基于文件轮询的进度监听 — 保留作为 fallback。
+ * 主路径已切换到 ProgressService（stdout 实时推送）。
+ * 新任务请使用 docmind.startTask 命令。
  */
 function startProgressPolling(context: vscode.ExtensionContext, workspaceRoot: string) {
   const lastHashes = new Map<string, string>();

@@ -224,6 +224,15 @@ export class DashboardPanel {
     DashboardPanel.currentPanel?._update(rootPath);
   }
 
+  /**
+   * 通过 postMessage 向 webview 发送增量进度更新（替代全量 HTML 重绘）。
+   */
+  public sendProgressUpdate(progress: ProgressStatus) {
+    if (this._panel.visible) {
+      this._panel.webview.postMessage({ type: 'progress_update', data: progress });
+    }
+  }
+
   private constructor(panel: vscode.WebviewPanel, private rootPath: string | undefined) {
     this._panel = panel;
     this._update(rootPath);
@@ -1217,6 +1226,57 @@ export class DashboardPanel {
         return;
       }
     });
+
+    // ── 增量进度更新（postMessage，替代全量 HTML 重绘）──
+    window.addEventListener('message', (event) => {
+      const msg = event.data;
+      if (msg.type === 'progress_update' && msg.data) {
+        const d = msg.data;
+        // 更新进度条
+        const fill = document.getElementById('progress-fill');
+        if (fill) { fill.style.width = d.percent + '%'; }
+        // 更新状态标签
+        const statusEl = document.getElementById('progress-status');
+        if (statusEl) {
+          statusEl.textContent = d.status;
+          statusEl.className = 'progress-status status-' + d.status;
+        }
+        // 更新信息
+        const projEl = document.getElementById('progress-project');
+        if (projEl) { projEl.textContent = d.project || '-'; }
+        const agentEl = document.getElementById('progress-agent');
+        if (agentEl) { agentEl.textContent = d.agent || '-'; }
+        const updEl = document.getElementById('progress-updated');
+        if (updEl) { updEl.textContent = d.updatedAt || '-'; }
+        // 更新消息
+        const msgEl = document.getElementById('progress-message');
+        if (msgEl) {
+          msgEl.innerHTML = d.message
+            ? '<div style="margin-bottom:16px;font-size:13px;color:var(--vscode-descriptionForeground);">' + d.message + '</div>'
+            : '';
+        }
+        // 更新步骤列表
+        const stepsEl = document.getElementById('progress-steps');
+        if (stepsEl && d.steps && d.steps.length) {
+          let html = '<div class="steps-list">';
+          for (const step of d.steps) {
+            const cls = ['completed','success','done'].includes(step.status) ? 'completed'
+              : ['running','processing','in_progress'].includes(step.status) ? 'running'
+              : ['failed','error'].includes(step.status) ? 'failed' : 'pending';
+            html += '<div class="step-item">'
+              + '<div class="step-indicator step-' + cls + '"></div>'
+              + '<div class="step-content">'
+              + '<div class="step-name">' + (step.name || step.id || '') + '</div>'
+              + '<div class="step-message">' + (step.message || step.status) + '</div>'
+              + '</div>'
+              + '<div class="step-progress">' + (typeof step.percent === 'number' ? step.percent + '%' : step.status) + '</div>'
+              + '</div>';
+          }
+          html += '</div>';
+          stepsEl.innerHTML = html;
+        }
+      }
+    });
   </script>
 </body>
 </html>`;
@@ -1275,38 +1335,40 @@ export class DashboardPanel {
 
     const statusClass = this.statusClass(progress.status);
     return `
-      <div class="progress-container fade-in">
+      <div class="progress-container fade-in" id="progress-container">
         <div class="progress-header">
-          <div class="progress-title">${this.escapeHtml(progress.workflow || progress.project || 'DocMind Task')}</div>
-          <span class="progress-status status-${statusClass}">${this.escapeHtml(progress.status)}</span>
+          <div class="progress-title" id="progress-title">${this.escapeHtml(progress.workflow || progress.project || 'DocMind Task')}</div>
+          <span class="progress-status status-${statusClass}" id="progress-status">${this.escapeHtml(progress.status)}</span>
         </div>
 
         <div class="progress-bar">
-          <div class="progress-fill" style="width: ${progress.percent}%"></div>
+          <div class="progress-fill" id="progress-fill" style="width: ${progress.percent}%"></div>
         </div>
 
-        <div class="progress-info">
+        <div class="progress-info" id="progress-info">
           <div class="progress-info-item">
             <div class="progress-info-label">${this.t('project')}</div>
-            <div class="progress-info-value">${this.escapeHtml(progress.project || '-')}</div>
+            <div class="progress-info-value" id="progress-project">${this.escapeHtml(progress.project || '-')}</div>
           </div>
           <div class="progress-info-item">
             <div class="progress-info-label">${this.t('agent')}</div>
-            <div class="progress-info-value">${this.escapeHtml(progress.agent || '-')}</div>
+            <div class="progress-info-value" id="progress-agent">${this.escapeHtml(progress.agent || '-')}</div>
           </div>
           <div class="progress-info-item">
             <div class="progress-info-label">${this.t('updated')}</div>
-            <div class="progress-info-value">${this.escapeHtml(progress.updatedAt || '-')}</div>
+            <div class="progress-info-value" id="progress-updated">${this.escapeHtml(progress.updatedAt || '-')}</div>
           </div>
         </div>
 
-        ${progress.message ? `<div style="margin-bottom: 16px; font-size: 13px; color: var(--vscode-descriptionForeground);">${this.escapeHtml(progress.message)}</div>` : ''}
+        <div id="progress-message">${progress.message ? `<div style="margin-bottom: 16px; font-size: 13px; color: var(--vscode-descriptionForeground);">${this.escapeHtml(progress.message)}</div>` : ''}</div>
 
+        <div id="progress-steps">
         ${progress.steps.length ? `
           <div class="steps-list">
             ${progress.steps.map(step => this.renderStepItem(step)).join('')}
           </div>
         ` : ''}
+        </div>
 
         ${progress.outputs.length ? `
           <div class="outputs-section">

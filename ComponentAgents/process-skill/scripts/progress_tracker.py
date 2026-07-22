@@ -76,6 +76,20 @@ class ProgressTracker:
         self._tasks: dict[str, dict] = {}
         self._lock = threading.Lock()
         self._on_step = on_step
+        self._enable_stdout = os.environ.get("DOCMIND_STDOUT", "1") == "1"
+
+    # ── stdout JSON 输出 ────────────────────────────────────
+
+    def _emit(self, event: dict):
+        """向 stdout 输出 JSON line（供 VS Code Extension 实时读取）"""
+        if not self._enable_stdout:
+            return
+        try:
+            import sys
+            line = json.dumps(event, ensure_ascii=False, default=str)
+            print(f"DOCMIND:{line}", file=sys.stdout, flush=True)
+        except Exception:
+            pass
 
     # ── 创建任务 ─────────────────────────────────────────────
 
@@ -135,6 +149,7 @@ class ProgressTracker:
             self._tasks[task_id] = task
 
         self._flush(task_id)
+        self._emit({"type": "task_create", "task_id": task_id, "project": project, "workflow": workflow, "agent": agent})
         return task_id
 
     # ── 步骤控制 ─────────────────────────────────────────────
@@ -143,10 +158,12 @@ class ProgressTracker:
         """标记步骤开始执行"""
         self._update_step(task_id, step_id, "running", 0, message)
         self._set_current_step(task_id, step_id)
+        self._emit({"type": "step_start", "task_id": task_id, "step_id": step_id, "message": message})
 
     def step_progress(self, task_id: str, step_id: str, percent: int, message: str = ""):
         """更新步骤进度（0-100）"""
         self._update_step(task_id, step_id, "running", percent, message)
+        self._emit({"type": "step_progress", "task_id": task_id, "step_id": step_id, "percent": percent, "message": message})
 
     def complete_step(self, task_id: str, step_id: str, message: str = ""):
         """标记步骤完成"""
@@ -155,6 +172,7 @@ class ProgressTracker:
             task = self._tasks.get(task_id)
             if task and step_id not in task["completed_steps"]:
                 task["completed_steps"].append(step_id)
+        self._emit({"type": "step_complete", "task_id": task_id, "step_id": step_id, "message": message})
 
     def fail_step(self, task_id: str, step_id: str, error: str):
         """标记步骤失败"""
@@ -166,6 +184,7 @@ class ProgressTracker:
                 task["error"] = error
                 if step_id not in task["failed_steps"]:
                     task["failed_steps"].append(step_id)
+        self._emit({"type": "step_fail", "task_id": task_id, "step_id": step_id, "error": error})
 
     def skip_step(self, task_id: str, step_id: str, reason: str = ""):
         """跳过步骤"""
@@ -184,6 +203,7 @@ class ProgressTracker:
                 task["updated_at"] = self._now()
                 task["current_step"] = None
         self._flush(task_id)
+        self._emit({"type": "task_complete", "task_id": task_id, "message": message})
 
     def fail_task(self, task_id: str, error: str):
         """标记整个任务失败"""
@@ -195,6 +215,7 @@ class ProgressTracker:
                 task["updated_at"] = self._now()
                 task["current_step"] = None
         self._flush(task_id)
+        self._emit({"type": "task_fail", "task_id": task_id, "error": error})
 
     # ── 产物追踪 ─────────────────────────────────────────────
 
