@@ -256,6 +256,13 @@ class ASTToDocxConverter:
 
         self._clear_paragraph(para, include_formulas=True)
 
+        # 设置 Word Heading 样式（TOC 依赖此样式生成目录）
+        style_name = f'Heading {heading_level}'
+        try:
+            para.style = style_name
+        except (KeyError, ValueError) as e:
+            print(f"[WARNING] Could not set style '{style_name}': {e}")
+
         runs = para_data.get("runs", [])
         if runs:
             for run_data in runs:
@@ -509,7 +516,13 @@ class ASTToDocxConverter:
         spacing_after = lvl_cfg.get("spacing_after", 18 if heading_level == 1 else 12 if heading_level == 2 else 6)
         alignment_str = lvl_cfg.get("alignment", "center" if heading_level == 1 else "left")
 
-        para = self.doc.add_paragraph()
+        # 设置 Word Heading 样式（TOC 依赖此样式生成目录）
+        style_name = f'Heading {heading_level}'
+        try:
+            para = self.doc.add_paragraph(style=style_name)
+        except (KeyError, ValueError) as e:
+            print(f"[WARNING] Could not use style '{style_name}': {e}")
+            para = self.doc.add_paragraph()
 
         for run_data in para_data.get("runs", []):
             if run_data.get("type") == "formula":
