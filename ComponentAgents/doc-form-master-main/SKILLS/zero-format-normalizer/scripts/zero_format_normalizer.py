@@ -224,6 +224,7 @@ class ZeroFormatNormalizer:
         cover_end = 0
         toc_start = -1
         toc_end = -1
+        ref_start = len(paras)  # ⭐ 默认无参考文献（值=末尾，即无references段落）
 
         toc_keywords = ["目录", "目 录", "目  录", "table of contents", "contents"]
 
@@ -263,18 +264,29 @@ class ZeroFormatNormalizer:
             if toc_end < 0:
                 toc_end = min(toc_start + 20, len(paras))
 
+        # ⭐ 检测参考文献区域边界（防止中英混杂参考文献被误判为标题）
+        ref_keywords = ["参考文献", "references", "bibliography"]
+        for i, p in enumerate(paras):
+            text_lower = (p.get("text") or "").strip().lower()
+            if any(kw in text_lower for kw in ref_keywords):
+                ref_start = i
+                break
+
         for i, p in enumerate(paras):
             if toc_start >= 0 and toc_start <= i < toc_end:
                 p["section"] = "toc"
             elif i < cover_end:
                 p["section"] = "cover"
+            elif i >= ref_start:
+                p["section"] = "references"
             else:
                 p["section"] = "body"
 
         self.ast["section_regions"] = {
             "cover_end": cover_end,
             "toc_start": toc_start,
-            "toc_end": toc_end
+            "toc_end": toc_end,
+            "ref_start": ref_start,
         }
 
     def _detect_heading_level(self, text, prev_text=None, next_text=None):

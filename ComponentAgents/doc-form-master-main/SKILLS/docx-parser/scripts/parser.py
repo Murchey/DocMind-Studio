@@ -546,11 +546,22 @@ class DocxParser:
                 toc_end = min(toc_start + 20, len(paras))
 
         # 标记段落区域，并根据标题检测结果更新样式
+        # ⭐ 检测参考文献区域边界
+        ref_keywords = ["参考文献", "references", "bibliography"]
+        ref_start = len(paras)
+        for i, p in enumerate(paras):
+            text_lower = (p.get("text") or "").strip().lower()
+            if any(kw in text_lower for kw in ref_keywords):
+                ref_start = i
+                break
+
         for i, p in enumerate(paras):
             if toc_start >= 0 and toc_start <= i < toc_end:
                 p["section"] = "toc"
             elif i < cover_end:
                 p["section"] = "cover"
+            elif i >= ref_start:
+                p["section"] = "references"
             else:
                 p["section"] = "body"
                 # 对于正文区域，根据标题检测结果更新样式
@@ -561,7 +572,8 @@ class DocxParser:
         self.ast["section_regions"] = {
             "cover_end": cover_end,
             "toc_start": toc_start,
-            "toc_end": toc_end
+            "toc_end": toc_end,
+            "ref_start": ref_start,
         }
 
 
