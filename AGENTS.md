@@ -41,7 +41,60 @@ DocMind-Studio/                        # 根目录
 │       ├── ppt-deep-summary/
 │       ├── phd-research-agent/
 │       ├── ppt-master/
-│       └── ppt-continuation-tool/
+│       ├── ppt-continuation-tool/
+│       └── 成果/                      # ⭐ 项目最终产出汇总（所有工作流完成后）
+│           ├── README.md              # 成果清单说明
+│           ├── *.docx                 # 最终文档
+│           ├── *.pptx                 # 最终演示文稿
+│           ├── *.xlsx                 # 最终表格
+│           └── ...                    # 其他最终交付物
+```
+
+### 成果文件夹规范
+
+所有工作流执行完毕后，调度器必须将**最终交付物**汇总到 `WORKSPACE/{ProjectName}/成果/` 目录：
+
+- **汇总时机**：整个工作流所有 Step 均完成后，最后一步执行
+- **汇总内容**：仅包含最终交付文件（DOCX/PPTX/XLSX/PDF 等），不含中间过程文件
+- **README.md**：生成一份简要的成果清单说明，列出每个文件的用途和生成时间
+- **目录结构**：扁平化存储，不嵌套 Agent 子目录
+
+```python
+def collect_final_outputs(project_name: str, output_summary: list):
+    """
+    收集所有最终交付物到成果文件夹
+    
+    Args:
+        project_name: 项目名称
+        output_summary: 最终文件清单，每项为 (源路径, 显示名称)
+    """
+    root = Path("d:/Projects/vibecoding/DocMind-Studio")
+    output_dir = root / "WORKSPACE" / project_name / "成果"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    from datetime import datetime
+    files = []
+    
+    for src_path, display_name in output_summary:
+        src = Path(src_path)
+        if src.exists():
+            dest = output_dir / display_name
+            shutil.copy2(str(src), str(dest))
+            files.append({
+                "file": display_name,
+                "size": src.stat().st_size,
+                "source": str(src.relative_to(root / "WORKSPACE" / project_name))
+            })
+    
+    # 生成 README.md 成果清单
+    readme = f"# {project_name} - 成果清单\n\n"
+    readme += f"生成时间：{datetime.now().strftime('%Y-%m-%d %H:%M')}\n\n"
+    readme += "| 文件 | 大小 | 来源 |\n"
+    readme += "|------|------|------|\n"
+    for f in files:
+        readme += f"| {f['file']} | {f['size']:,} B | {f['source']} |\n"
+    
+    (output_dir / "README.md").write_text(readme, encoding="utf-8")
 ```
 
 ### 命名规则
@@ -317,8 +370,10 @@ tracker.complete_task(task_id=task_id, message="知识库构建完成")
   Step 1: doc-content-analysis（材料提取：PDF/DOCX → 内容提取 + AI 总结）
   Step 2: phd-research-agent（论文评审/idea评估/Introduction起草/开题报告生成）
   Step 3: doc-form-master（格式标准化：MD → 格式化 DOCX/PDF）
+  Step 3b: ⭐ content_validator（MD 预检 + DOCX 后检 — 拦截乱码风险）
   Step 4: 知识库构建（可选）
-  输出：WORKSPACE/{ProjectName}/doc-form-master/output/
+  输出汇总：WORKSPACE/{ProjectName}/成果/（最终交付物汇总）
+  原始输出：WORKSPACE/{ProjectName}/doc-form-master/output/
 ```
 
 **触发关键词**：论文、学术、评审、开题报告、文献综述、Introduction、idea评估、格式化论文
@@ -402,13 +457,35 @@ tracker.step_start(task_id=task_id, step_id="format-output", message="开始格�
 phd_summary = ws / "phd-research-agent" / "summary"
 for md_file in phd_summary.glob("*.md"):
     shutil.copy(str(md_file), str(ws / "doc-form-master" / "input" / md_file.name))
+# ⭐ 内容校验：MD 预检（拦截乱码风险）
+VALIDATOR = "ComponentAgents/doc-form-master-main/SKILLS/format-ai-checker/scripts/content_validator.py"
+md_file = str(ws / "doc-form-master" / "input" / "*.md")
+docx_file = str(ws / "doc-form-master" / "output" / "output.docx")
+
+# 预检
+import json
+pre_check = subprocess.run(["python", VALIDATOR, "pre", md_file], capture_output=True, text=True)
+if pre_check.returncode != 0:
+    pre_report = json.loads(pre_check.stdout) if pre_check.stdout else {}
+    tracker.complete_step(task_id=task_id, step_id="format-output",
+        message="MD 预检未通过，请修复源文件中的乱码风险后再转换")
+    print(f"[VALIDATOR] MD 预检未通过：{json.dumps(pre_report.get('issues', []), ensure_ascii=False, indent=2)}")
+    tracker.complete_task(task_id=task_id, message="格式标准化中止：MD 内容校验未通过")
+    return
+
 # MD → DOCX
 subprocess.run([
     "python", "ComponentAgents/doc-form-master-main/SKILLS/markitdown-converter/scripts/markitdown_converter.py",
-    str(ws / "doc-form-master" / "input" / "*.md"),
-    str(ws / "doc-form-master" / "output" / "output.docx")
+    md_file, docx_file
 ], check=True)
-tracker.complete_step(task_id=task_id, step_id="format-output", message="格式标准化输出完成")
+
+# ⭐ 内容校验：DOCX 后检（验证输出无乱码）
+post_check = subprocess.run(["python", VALIDATOR, "post", docx_file, md_file], capture_output=True, text=True)
+if post_check.returncode != 0:
+    post_report = json.loads(post_check.stdout) if post_check.stdout else {}
+    print(f"[VALIDATOR] DOCX 后检发现问题：{json.dumps(post_report.get('issues', []), ensure_ascii=False, indent=2)}")
+    print("[VALIDATOR] 输出文件可能存在乱码，建议修复 MD 源文件后重新转换")
+tracker.complete_step(task_id=task_id, step_id="format-output", message="格式标准化输出完成（含内容校验）")
 
 # 任务完成
 tracker.complete_task(task_id=task_id, message="学术文档处理完成")
@@ -423,11 +500,13 @@ tracker.complete_task(task_id=task_id, message="学术文档处理完成")
   Step 0: 创建 WORKSPACE/{ProjectName}/
   Step 1: doc-content-analysis（内容提取）
   Step 2: excel-master（表格对比 + 图表）
-  Step 3: doc-form-master（研究报告）
+  Step 3: doc-form-master（研究报告 MD → DOCX）
+  Step 3b: ⭐ content_validator（MD 预检 + DOCX 后检 — 拦截乱码风险）
   Step 4: ppt-master（汇报PPT）
   Step 5: kb_manager.py init --agent doc-content-analysis（项目知识库首次构建）
           各 Agent 完成后通过 register 汇入项目知识库
-  输出：WORKSPACE/{ProjectName}/ppt-master/output/ + WORKSPACE/{ProjectName}/knowledge-base/
+  输出汇总：WORKSPACE/{ProjectName}/成果/（最终交付物汇总）
+  原始输出：WORKSPACE/{ProjectName}/ppt-master/output/ + WORKSPACE/{ProjectName}/knowledge-base/
 ```
 
 **触发关键词**：会议纪要、企业报告、表格对比、研究报告、汇报PPT、市场分析
@@ -479,11 +558,25 @@ def execute_enterprise_docs(project_name: str, materials: list, tables: list):
         ], check=True)
     tracker.complete_step(task_id=task_id, step_id="excel-analysis", message="表格对比分析完成")
 
-    # Step 3-4: 报告、PPT...（含进度同步）
+    # Step 3: 报告生成（含进度同步）
     tracker.step_start(task_id=task_id, step_id="report-generation", message="开始研究报告生成")
-    # ... doc-form-master 生成研究报告
+    # ... doc-form-master 生成研究报告（MD → DOCX）
     tracker.complete_step(task_id=task_id, step_id="report-generation", message="研究报告生成完成")
 
+    # ⭐ Step 3b: 内容校验（MD 预检 + DOCX 后检 — 拦截乱码风险）
+    VALIDATOR = root / "ComponentAgents/doc-form-master-main/SKILLS/format-ai-checker/scripts/content_validator.py"
+    md_file = str(ws / "doc-form-master" / "input" / "*.md")
+    docx_file = str(ws / "doc-form-master" / "output" / "*.docx")
+    pre_check = subprocess.run(["python", str(VALIDATOR), "pre", md_file], capture_output=True, text=True)
+    if pre_check.returncode != 0:
+        pre_report = json.loads(pre_check.stdout) if pre_check.stdout else {}
+        print(f"[VALIDATOR] MD 预检未通过，请修复后再转换: {json.dumps(pre_report.get('issues', []), ensure_ascii=False, indent=2)}")
+    # MD → DOCX 转换已在上一步完成
+    post_check = subprocess.run(["python", str(VALIDATOR), "post", docx_file, md_file], capture_output=True, text=True)
+    if post_check.returncode != 0:
+        print("[VALIDATOR] DOCX 后检发现问题，建议修复源 MD 后重新转换")
+
+    # Step 4: PPT 生成（含进度同步）
     tracker.step_start(task_id=task_id, step_id="ppt-generation", message="开始汇报PPT生成")
     # ... ppt-master 生成汇报PPT
     tracker.complete_step(task_id=task_id, step_id="ppt-generation", message="汇报PPT生成完成")
@@ -528,7 +621,8 @@ def execute_enterprise_docs(project_name: str, materials: list, tables: list):
   核心点提取（每页 ≤ 5 条 × ≤ 15 字）
   Step 5: ppt-master（生成精简型 PPT）
   Step 6: kb_manager.py init --agent doc-content-analysis（项目知识库构建）
-  输出：WORKSPACE/{ProjectName}/ppt-master/output/ + WORKSPACE/{ProjectName}/knowledge-base/
+  输出汇总：WORKSPACE/{ProjectName}/成果/（最终交付物汇总）
+  原始输出：WORKSPACE/{ProjectName}/ppt-master/output/ + WORKSPACE/{ProjectName}/knowledge-base/
 ```
 
 **触发关键词**：竞赛、答辩、项目书、资源包、ZIP、7Z

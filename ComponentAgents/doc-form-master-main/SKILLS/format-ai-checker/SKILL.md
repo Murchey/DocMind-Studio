@@ -57,6 +57,78 @@ python SKILLS/format-ai-checker/scripts/xml_inspector.py workspace/output/format
 
 ---
 
+# Content Validator — 内容乱码校验（新增）
+
+通过检测 MD 源文件和 DOCX 输出文件，预防和发现因 pandoc 转换导致的乱码问题。
+
+**典型场景**：MD 文件中嵌入了 raw JSON 数据（含 `\\` 反斜杠路径），pandoc 在 MD→DOCX 时将 `\\` 解释为转义符，导致路径信息丢失和乱码。
+
+## 检测规则
+
+| 规则 | 阶段 | 严重度 | 说明 |
+|------|------|--------|------|
+| RAW_JSON_BLOB | 预检 | ERROR | 嵌入的 JSON/代码块中包含反斜杠转义符 |
+| BACKSLASH_PATH | 预检 | ERROR | 文本中包含 Windows 反斜杠路径 |
+| OVERSIZE_PARAGRAPH | 预检 | WARNING | 段落过长（>5000 chars），pandoc 可能截断 |
+| GARBLED_DOLLAR | 预检/后检 | ERROR | 连续 $$$ 符号 — 反斜杠被吃掉的乱码特征 |
+| JSON_RESIDUE | 后检 | ERROR | DOCX 中残留 JSON 片段 |
+| PARAGRAPH_MISMATCH | 后检 | WARNING | DOCX 段落数远少于源 MD（覆盖率 <30%） |
+| TABLE_CORRUPTION | 后检 | WARNING | MD 含表格但 DOCX 中无任何表格 |
+
+## CLI 调用
+
+```bash
+# 预检（MD→DOCX 转换前）
+python SKILLS/format-ai-checker/scripts/content_validator.py pre source.md
+
+# 后检（转换后检查 DOCX）
+python SKILLS/format-ai-checker/scripts/content_validator.py post output.docx source.md
+
+# 全流程（预检 + 后检）
+python SKILLS/format-ai-checker/scripts/content_validator.py full source.md output.docx
+```
+
+**返回值**：JSON 报告，含 status（PASS/WARN/FAIL）、issues 列表、summary。
+**退出码**：0（PASS/WARN）、1（FAIL）
+
+## Python API
+
+```python
+from content_validator import ContentValidator
+
+validator = ContentValidator()
+
+# 预检
+report = validator.pre_check_md("report.md")
+if report.has_errors():
+    print("存在严重问题，请修复后再转换")
+    for issue in report.issues:
+        print(f"  [{issue.severity}] {issue.category}: {issue.message}")
+
+# 后检
+report = validator.post_check_docx("report.docx", "report.md")
+if report.status == "PASS":
+    print("DOCX 内容校验通过，无乱码")
+
+# 全流程
+report = validator.check("report.md", "report.docx")
+report.print_summary()
+```
+
+## 集成到 AGENT 流程
+
+在 doc-form-master 的 MD→DOCX 转换前后各调用一次：
+
+```
+Step: MD→DOCX 转换
+  ├── [前] content_validator pre_check      ← 提前拦截问题
+  ├── markitdown_converter md→docx
+  └── [后] content_validator post_check     ← 验证输出无乱码
+       └── 如果 FAIL → 提示修复源 MD → 重新转换
+```
+
+---
+
 # 检查流程
 
 ```
@@ -262,7 +334,8 @@ SKILLS/format-ai-checker/
 │   ├── xml_inspector.py              # 主入口（检查 + 自动修复循环）
 │   ├── docx_xml_reader.py            # DOCX XML 解析器（ZIP → 格式属性）
 │   ├── rule_engine.py                # 规则引擎（YAML → 逐项比对）
-│   └── docx_fixer.py                 # 自动修复器（XML 级别修改 DOCX）
+│   ├── docx_fixer.py                 # 自动修复器（XML 级别修改 DOCX）
+│   └── content_validator.py          # ⭐ 内容乱码校验器（MD预检 + DOCX后检）
 └── rules/
     └── chinese_academic_rules.yaml   # 中文学术论文格式规则集
 ```
