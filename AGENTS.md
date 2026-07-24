@@ -370,7 +370,7 @@ tracker.complete_task(task_id=task_id, message="知识库构建完成")
   Step 1: doc-content-analysis（材料提取：PDF/DOCX → 内容提取 + AI 总结）
   Step 2: phd-research-agent（论文评审/idea评估/Introduction起草/开题报告生成）
   Step 3: doc-form-master（格式标准化：MD → 格式化 DOCX/PDF）
-  Step 3b: ⭐ content_validator（MD 预检 + DOCX 后检 — 拦截乱码风险）
+          ⭐ 自动集成：content_validator（乱码预检+后检）+ font_fixer（宋体强制）
   Step 4: 知识库构建（可选）
   输出汇总：WORKSPACE/{ProjectName}/成果/（最终交付物汇总）
   原始输出：WORKSPACE/{ProjectName}/doc-form-master/output/

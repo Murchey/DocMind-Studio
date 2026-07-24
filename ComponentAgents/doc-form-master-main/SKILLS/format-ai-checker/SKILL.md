@@ -57,6 +57,42 @@ python SKILLS/format-ai-checker/scripts/xml_inspector.py workspace/output/format
 
 ---
 
+# Font Fixer — 正文字体强制修正
+
+所有 markitdown-converter（pandoc）生成的 DOCX 文件，正文字体默认使用 Calibri。
+Font Fixer 在 pandoc 转换完成后自动执行后处理，强制将正文字体修正为宋体。
+
+## 修正规则
+
+| 元素 | 字体 | 说明 |
+|------|------|------|
+| 中文正文 | 宋体 (SimSun) | 含中文的 run |
+| 英文正文 | Times New Roman | 不含中文的 run |
+| 标题 (Heading 1/2/3) | 黑体 | 该样式段落的所有 run |
+| 表格中文 | 宋体 | 表格单元格内的中文内容 |
+
+## 双重保障机制
+
+1. **pandoc 引用模板**：`templates/chinese_reference.docx`，通过 `--reference-doc` 传参设置 pandoc 级默认字体
+2. **后处理修正**：pandoc 转换后自动调用 `font_fixer.py fix`，遍历所有段落 run 强制应用字体会
+
+## CLI 调用
+
+```bash
+# 修正已有 DOCX
+python SKILLS/format-ai-checker/scripts/font_fixer.py fix input.docx [output.docx]
+
+# 创建 pandoc 引用模板
+python SKILLS/format-ai-checker/scripts/font_fixer.py create-ref template.docx
+```
+
+## 集成方式
+
+已在 `PandocConverter.convert_md_to_docx()` 中自动集成：
+- 转换前：`_ensure_reference_doc()` 自动创建/复用引用模板
+- 转换后：`font_fixer.py fix` 遍历所有 run 强制修正
+- 对调用方完全透明，无需额外配置
+
 # Content Validator — 内容乱码校验（新增）
 
 通过检测 MD 源文件和 DOCX 输出文件，预防和发现因 pandoc 转换导致的乱码问题。

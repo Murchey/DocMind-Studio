@@ -115,7 +115,14 @@ class MathFormulaProcessor:
 # ============================================================
 
 class PandocConverter:
-    """使用 pandoc 将 Markdown 转换为 DOCX"""
+    """使用 pandoc 将 Markdown 转换为 DOCX，并强制正文字体为宋体"""
+
+    # ⭐ pandoc 引用模板路径（设置默认字体为宋体）
+    REFERENCE_DOC = Path(__file__).resolve().parent.parent.parent.parent / \
+        "SKILLS" / "format-ai-checker" / "templates" / "chinese_reference.docx"
+    # ⭐ 字体修正器路径
+    FONT_FIXER = Path(__file__).resolve().parent.parent.parent.parent / \
+        "SKILLS" / "format-ai-checker" / "scripts" / "font_fixer.py"
     
     def __init__(self):
         self.pandoc_available = self._check_pandoc()
@@ -128,8 +135,26 @@ class PandocConverter:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             return False
 
+    @classmethod
+    def _ensure_reference_doc(cls) -> str:
+        """确保引用模板存在，不存在则自动创建"""
+        ref_path = cls.REFERENCE_DOC
+        if not ref_path.exists():
+            ref_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                # 使用 font_fixer 创建引用模板
+                subprocess.run(
+                    [sys.executable, str(cls.FONT_FIXER), "create-ref", str(ref_path)],
+                    capture_output=True, text=True, timeout=30, check=True
+                )
+                logger.info(f"自动创建 pandoc 引用模板: {ref_path}")
+            except Exception as e:
+                logger.warning(f"创建引用模板失败，将不使用 --reference-doc: {e}")
+                return ""
+        return str(ref_path)
+
     def convert_md_to_docx(self, input_path: str, output_path: str = None) -> dict:
-        """将 Markdown 转换为 DOCX"""
+        """将 Markdown 转换为 DOCX，并强制使用宋体作为正文字体"""
         if not self.pandoc_available:
             return {'success': False, 'error': 'pandoc 未安装。安装命令: winget install JohnMacFarlane.Pandoc'}
 
@@ -143,16 +168,21 @@ class PandocConverter:
         temp_dir.mkdir(parents=True, exist_ok=True)
         temp_path = temp_dir / f'preprocessed_{Path(input_path).name}'
         
-        result = MathFormulaProcessor.process_file(input_path, str(temp_path))
-        processed_path = str(temp_path) if result['success'] and result['has_math'] else input_path
+        math_result = MathFormulaProcessor.process_file(input_path, str(temp_path))
+        processed_path = str(temp_path) if math_result['success'] and math_result['has_math'] else input_path
 
-        # 使用 pandoc 转换
+        # 使用 pandoc 转换（带引用模板）
         cmd = [
             'pandoc', processed_path, '-o', output_path,
             '-f', 'markdown+tex_math_dollars+tex_math_single_backslash',
             '-t', 'docx+native_numbering',
             '--mathml', '--standalone',
         ]
+        
+        # ⭐ 添加宋体引用模板
+        ref_doc = self._ensure_reference_doc()
+        if ref_doc:
+            cmd.extend(['--reference-doc', ref_doc])
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
@@ -162,6 +192,19 @@ class PandocConverter:
                 Path(processed_path).unlink(missing_ok=True)
 
             if result.returncode == 0:
+                # ⭐ 后处理：用 font_fixer 强制应用宋体（即使引用模板未生效）
+                try:
+                    font_fix = subprocess.run(
+                        [sys.executable, str(self.FONT_FIXER), "fix", output_path],
+                        capture_output=True, text=True, timeout=30
+                    )
+                    if font_fix.returncode == 0:
+                        import json
+                        fix_data = json.loads(font_fix.stdout)
+                        logger.info(f"字体修正完成: {fix_data.get('fixed_runs', 0)} runs")
+                except Exception as e:
+                    logger.warning(f"字体修正后处理异常（不影响输出）: {e}")
+                
                 return {'success': True, 'output_path': output_path, 'method': 'pandoc', 'file_size': os.path.getsize(output_path)}
             else:
                 return {'success': False, 'method': 'pandoc', 'error': result.stderr or result.stdout}
