@@ -149,6 +149,31 @@ NotebookLM 擅长个人知识管理，但输出是文本而非可用的文件。
 
 ---
 
+## 快速部署
+
+> 如果你是从零开始的新环境，让 AI 帮你一键完成部署。
+
+### 前提：安装必要软件
+
+确保已安装以下软件（参见 [PROJECT_GUIDANCE.MD](./PROJECT_GUIDANCE.MD) 获取详细步骤）：
+
+- **Python >= 3.10**
+- **Git**
+- **Pandoc**（doc-form-master 需要）
+- **Node.js >= 18**（仅 VS Code 插件开发需要，普通用户可跳过）
+
+### 一键部署
+
+安装完上述软件后，在 AI 对话中输入：
+
+```
+请参考 PROJECT_GUIDANCE.MD 帮我完成项目部署
+```
+
+AI 将自动执行：安装 Python 依赖 → 下载 ppt-master → 验证安装 → 安装 VS Code 插件。
+
+---
+
 ## 快速开始
 
 ### 第一步：告诉我你要做什么

@@ -543,17 +543,19 @@ function scanAllWorkflowStates(rootPath: string): Map<string, object> {
  */
 function startProgressPolling(context: vscode.ExtensionContext, workspaceRoot: string) {
   const lastHashes = new Map<string, string>();
+  let lastProjectCount = 0;
 
   const poll = () => {
     const states = scanAllWorkflowStates(workspaceRoot);
-    let changed = false;
+    let progressChanged = false;
+    let structureChanged = false;
 
     states.forEach((state, projectName) => {
       const content = JSON.stringify(state);
       const hash = crypto.createHash('md5').update(content).digest('hex');
       if (lastHashes.get(projectName) !== hash) {
         lastHashes.set(projectName, hash);
-        changed = true;
+        progressChanged = true;
       }
     });
 
@@ -561,11 +563,23 @@ function startProgressPolling(context: vscode.ExtensionContext, workspaceRoot: s
     lastHashes.forEach((_, projectName) => {
       if (!states.has(projectName)) {
         lastHashes.delete(projectName);
-        changed = true;
+        structureChanged = true;
       }
     });
 
-    if (changed) {
+    // 项目数量变化 → 结构化变更，需要全量刷新
+    if (states.size !== lastProjectCount) {
+      lastProjectCount = states.size;
+      structureChanged = true;
+    }
+
+    // 进度数据变更 → 增量更新（postMessage，不刷新整个 HTML）
+    if (progressChanged && !structureChanged) {
+      DashboardPanel.syncProgressFromFile(workspaceRoot);
+    }
+
+    // 结构化变更 → 全量刷新
+    if (structureChanged) {
       DashboardPanel.refresh(workspaceRoot);
     }
   };

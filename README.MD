@@ -87,6 +87,8 @@ Process competition resource packages, extract project core points, and generate
 
 **Trigger**: "competition", "defense", "challenge cup", "project proposal"
 
+**You can also explicitly specify which workflow to use.**
+
 ---
 
 ## Use Cases
@@ -148,17 +150,48 @@ NotebookLM is great for personal knowledge management, but outputs text, not usa
 
 ---
 
+## Deployment
+
+> Starting from a fresh environment? Let the AI handle the entire deployment for you.
+
+### Prerequisites: Install required software
+
+Make sure the following are installed (see [PROJECT_GUIDANCE.MD](./PROJECT_GUIDANCE.MD) for detailed steps):
+
+- **Python >= 3.10**
+- **Git**
+- **Pandoc** (required by doc-form-master)
+- **Node.js >= 18** (only needed for VS Code extension development; regular users can skip)
+
+### One-click deployment
+
+After installing the above, tell the AI:
+
+```
+Please reference PROJECT_GUIDANCE.MD and complete the project deployment for me
+```
+
+The AI will automatically: install Python dependencies → download ppt-master → verify installation → install the VS Code extension.
+
+---
+
 ## Quick Start
 
 ### Step 1: Tell us what you need
 
-Describe your requirement in natural language, for example:
+First, share the AGENTS.md file path with the AI so it can load the dispatcher, then describe your needs. For example:
 
 - "Help me turn these papers into a thesis proposal" → **Academic workflow**
 - "Here's our competition resource pack, generate a defense PPT" → **Competition workflow**
 - "Format this paper to academic standards" → **Formatting + AI check**
 - "Compare data across these spreadsheets" → **Excel processing**
 - "Build a knowledge base from these documents" → **Knowledge base**
+
+Complete prompt example:
+
+```
+Load the AGENTS.md file, then help me format this paper to academic standards. Paper path: input/paper.docx
+```
 
 ### Step 2: Provide your documents
 
@@ -175,9 +208,11 @@ WORKSPACE/{your-project}/
 
 > You don't need to create directories manually — the dispatcher handles it.
 
+For first-time use, if no WORKSPACE directory exists, you can temporarily place files in any folder. The dispatcher will auto-initialize the standard workspace directory structure once it runs.
+
 ### Step 3: Wait and monitor progress
 
-The dispatcher orchestrates the entire workflow. Track progress in real time via the **VS Code Dashboard**:
+The dispatcher orchestrates the entire workflow. Track progress in real time via the **VS Code Dashboard** (optional install), or follow along in your AI terminal:
 
 - Content extraction complete → auto-advances to next step
 - Formatting done → AI format check triggers automatically, fixes issues on the spot
@@ -197,6 +232,8 @@ WORKSPACE/{your-project}/
 ```
 
 ### Examples
+
+All examples assume you have first shared the AGENTS.md file with the AI.
 
 **Example 1: Academic paper formatting**
 ```
@@ -236,10 +273,15 @@ DocMind-Studio/
 
 ## VS Code Extension
 
-Companion VS Code extension:
-- **Progress monitoring**: Real-time task progress tracking (implemented)
+Companion VS Code extension provides:
+- **Progress monitoring**: Real-time task progress tracking
 - **Quick preview**: One-click preview of generated documents and PPTs
 - **Workflow management**: Configure and switch between workflows
+- **Knowledge base browsing**: View and query all project knowledge bases
+
+**Extension file location**: `Extension/docmind-studio-0.2.0.vsix`
+
+Install via VS Code: `Ctrl+Shift+P` → `Extensions: Install from VSIX...` → select the file above.
 
 ---
 

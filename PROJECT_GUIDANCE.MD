@@ -25,6 +25,8 @@ cd DocMind-Studio
 
 ## Step 2: 安装 Python 依赖
 
+> ⚠️ **重要：Python 版本必须 >= 3.10。** 部分 Agent 使用了 `str | None` 联合类型语法（PEP 604），低于 3.10 会直接报语法错误。
+
 每个 Agent 有独立的 `requirements.txt`，按需安装。**建议创建统一虚拟环境**：
 
 ```bash
@@ -94,7 +96,9 @@ python -c "from reportlab.lib.pagesizes import A4; print('ppt-deep-summary OK')"
 
 ## Step 5: 安装 VS Code 插件（可选）
 
-插件已随仓库提供，位于 `Extension/docmind-studio-0.2.0.vsix`。
+> 📦 **插件文件位置：`Extension/docmind-studio-0.2.0.vsix`**（项目根目录下的 `Extension/` 文件夹中）
+
+插件已随仓库提供，无需额外下载。
 
 在 VS Code 中按 `Ctrl+Shift+P` → 输入 `Extensions: Install from VSIX...` → 选择：
 
@@ -164,3 +168,6 @@ A: 需要安装 Tesseract OCR + 中文语言包，或启用 PaddleOCR/EasyOCR（
 
 ### Q: VS Code 插件 Dashboard 不显示进度
 A: 确保通过 `docmind.startTask` 命令启动任务（stdout 实时推送），或工作流执行时 ProgressTracker 自动写入进度文件（文件监听 fallback）
+
+### Q: 运行报错 `SyntaxError` 或类型语法不识别
+A: 检查 Python 版本：`python --version`。本项目要求 **Python >= 3.10**（使用了 `str | None` 等 PEP 604 语法），低于 3.10 请升级后重试。

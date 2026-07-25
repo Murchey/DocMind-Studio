@@ -225,6 +225,21 @@ export class DashboardPanel {
   }
 
   /**
+   * 从文件解析进度状态并通过 postMessage 发送增量更新（用于轮询 fallback）。
+   * 相比 refresh() 不会重新生成整个 HTML，避免 webview 闪烁和状态丢失。
+   */
+  public static syncProgressFromFile(rootPath: string) {
+    const panel = DashboardPanel.currentPanel;
+    if (!panel || !panel._panel.visible) {
+      return;
+    }
+    const progress = panel.scanProgress(rootPath);
+    if (progress.exists) {
+      panel.sendProgressUpdate(progress);
+    }
+  }
+
+  /**
    * 通过 postMessage 向 webview 发送增量进度更新（替代全量 HTML 重绘）。
    */
   public sendProgressUpdate(progress: ProgressStatus) {
@@ -1652,6 +1667,7 @@ export class DashboardPanel {
 
   /**
    * 查找工作流执行器状态文件（.workflow_state.json）
+   * 优先返回正在运行的任务，其次是最新更新的。
    */
   private findWorkflowStateFile(rootPath: string): string | undefined {
     const workspacePath = path.join(rootPath, 'WORKSPACE');
@@ -1659,28 +1675,66 @@ export class DashboardPanel {
       return undefined;
     }
 
-    // 递归查找所有项目的 .workflow_state.json
-    const findStateFile = (dir: string, depth: number): string | undefined => {
-      if (depth < 0 || !fs.existsSync(dir)) {
-        return undefined;
-      }
+    // 收集所有项目的 .workflow_state.json
+    const stateFiles: Array<{ path: string; status: string; updatedAt: string }> = [];
 
+    const collectStateFiles = (dir: string, depth: number): void => {
+      if (depth < 0 || !fs.existsSync(dir)) {
+        return;
+      }
       for (const entry of this.readDirEntries(dir)) {
         const fullPath = path.join(dir, entry.name);
         if (entry.isFile() && entry.name === '.workflow_state.json') {
-          return fullPath;
-        }
-        if (entry.isDirectory()) {
-          const found = findStateFile(fullPath, depth - 1);
-          if (found) {
-            return found;
+          try {
+            const content = this.readText(fullPath);
+            const raw = JSON.parse(content);
+            stateFiles.push({
+              path: fullPath,
+              status: raw.status || 'idle',
+              updatedAt: raw.updated_at || raw.updatedAt || '',
+            });
+          } catch {
+            stateFiles.push({ path: fullPath, status: 'unknown', updatedAt: '' });
           }
         }
+        if (entry.isDirectory()) {
+          collectStateFiles(fullPath, depth - 1);
+        }
       }
-      return undefined;
     };
 
-    return findStateFile(workspacePath, 3);
+    collectStateFiles(workspacePath, 3);
+
+    if (stateFiles.length === 0) {
+      return undefined;
+    }
+
+    // 排序：running > 其他 > completed > failed
+    const statusPriority: Record<string, number> = {
+      running: 0,
+      processing: 0,
+      active: 0,
+      idle: 1,
+      pending: 1,
+      initializing: 1,
+      unknown: 2,
+      completed: 3,
+      success: 3,
+      failed: 4,
+      error: 4,
+    };
+
+    stateFiles.sort((a, b) => {
+      const pa = statusPriority[a.status] ?? 2;
+      const pb = statusPriority[b.status] ?? 2;
+      if (pa !== pb) {
+        return pa - pb;
+      }
+      // 同优先级按更新时间倒序
+      return b.updatedAt.localeCompare(a.updatedAt);
+    });
+
+    return stateFiles[0].path;
   }
 
   /**
@@ -1690,8 +1744,8 @@ export class DashboardPanel {
     try {
       const raw = JSON.parse(this.readText(statePath)) as Record<string, unknown>;
       
-      // 优先使用新版 steps 数组（含 percent/message）
-      const rawSteps = raw.steps as ProgressStep[] | undefined;
+      // 优先使用新版 steps 数组（Python ProgressTracker 写入，含 id/name/status/percent/message）
+      const rawSteps = raw.steps as any[] | undefined;
       const completedSteps: string[] = (raw.completed_steps as string[]) || [];
       const failedSteps: string[] = (raw.failed_steps as string[]) || [];
       const currentStep = this.asString(raw.current_step);
@@ -1699,57 +1753,66 @@ export class DashboardPanel {
       let steps: ProgressStep[];
       
       if (rawSteps && rawSteps.length > 0) {
-        // 新版格式：直接使用 steps 数组
+        // 新版格式：直接使用 Python ProgressTracker 写入的 steps 数组
         steps = rawSteps.map((s: any) => ({
           id: this.asString(s.id),
           name: this.asString(s.name) || this.asString(s.id) || '',
           agent: this.asString(s.agent),
           status: this.asString(s.status) || 'pending',
-          percent: this.asNumber(s.percent) ?? this.asNumber(s.progress),
-          message: this.asString(s.message) || this.asString(s.detail),
+          percent: this.asNumber(s.percent) ?? 0,
+          message: this.asString(s.message),
         }));
       } else {
         // 旧版格式：从 completed_steps / failed_steps / current_step 重建
         steps = [];
-        completedSteps.forEach((stepId: string) => {
+        for (const stepId of completedSteps) {
           steps.push({ id: stepId, name: stepId, status: 'completed', percent: 100 });
-        });
+        }
         if (currentStep) {
           steps.push({ id: currentStep, name: currentStep, status: 'running', percent: 50 });
         }
-        failedSteps.forEach((stepId: string) => {
+        for (const stepId of failedSteps) {
           steps.push({ id: stepId, name: stepId, status: 'failed', percent: 100 });
-        });
+        }
       }
 
-      // 计算进度百分比
-      const totalSteps = completedSteps.length + failedSteps.length + (currentStep ? 1 : 0);
-      const percent = totalSteps > 0 ? Math.floor((completedSteps.length / totalSteps) * 100) : 0;
+      // 直接使用 Python ProgressTracker 写入的 progress 字段（step 加权平均值）
+      const totalPercent = this.asNumber(raw.progress);
+      const percent = totalPercent != null ? this.clampPercent(totalPercent)
+        : rawSteps && rawSteps.length > 0
+          ? this.clampPercent(Math.floor(rawSteps.reduce((sum: number, s: any) => sum + (this.asNumber(s.percent) ?? 0), 0) / rawSteps.length))
+          : (completedSteps.length + failedSteps.length > 0
+            ? this.clampPercent(Math.floor((completedSteps.length / (completedSteps.length + failedSteps.length)) * 100))
+            : 0);
 
-      // 确定状态
-      let status = 'running';
-      if (failedSteps.length > 0) {
-        status = 'failed';
-      } else if (!currentStep && completedSteps.length > 0) {
-        status = 'completed';
-      }
+      // 直接使用 Python ProgressTracker 写入的 status 字段
+      const status = this.asString(raw.status) || (
+        failedSteps.length > 0 ? 'failed'
+        : !currentStep && completedSteps.length > 0 ? 'completed'
+        : 'idle'
+      );
 
-      // 提取项目名（从路径推断）
-      const projectMatch = statePath.match(/WORKSPACE[\\/]([^\\/]+)[\\/]\\.workflow_state\\.json/);
-      const projectName = projectMatch ? projectMatch[1] : undefined;
+      // 提取项目名：从路径推断（相对 WORKSPACE 目录的第一级子目录）
+      const workspacePath = path.join(rootPath, 'WORKSPACE');
+      const relativePath = path.relative(workspacePath, statePath);
+      const projectName = relativePath ? relativePath.split(path.sep)[0] : undefined;
 
       return {
         exists: true,
         path: statePath,
-        project: projectName,
+        project: projectName || this.asString(raw.project),
         workflow: this.asString(raw.workflow) || 'Workflow',
+        agent: this.asString(raw.agent),
         status,
-        percent: this.clampPercent(percent),
+        phase: this.asString(raw.phase),
+        message: this.asString(raw.message) || (currentStep ? `执行中: ${currentStep}` : undefined),
+        percent,
         updatedAt: this.asString(raw.updated_at) || this.asString(raw.updatedAt),
+        startedAt: this.asString(raw.started_at) || this.asString(raw.startedAt),
         currentStep: currentStep || undefined,
         steps,
-        outputs: [],
-        message: currentStep ? `执行中: ${currentStep}` : (status === 'completed' ? '工作流执行完成' : undefined)
+        outputs: this.normalizeOutputs(raw.outputs, rootPath),
+        error: this.asString(raw.error),
       };
     } catch (error) {
       return {

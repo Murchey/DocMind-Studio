@@ -11,6 +11,7 @@
     "Other"
   ],
   "activationEvents": [
+    "onStartupFinished",
     "onLanguage:docmind-dms"
   ],
   "main": "./dist/extension.js",
